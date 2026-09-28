@@ -1,3 +1,7 @@
+// File: map_page.dart
+// Menampilkan peta langsung (real-time) yang melacak posisi anggota grup.
+// Halaman ini menggunakan Google Maps untuk menampilkan marker pengguna
+// serta panel di bagian bawah untuk melihat status masing-masing anggota.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -5,8 +9,10 @@ import 'package:flutter/services.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../theme/app_theme.dart';
 
+/// Status anggota grup, menentukan warna indikator dan opasitas marker.
 enum MemberStatus { online, offline }
 
+/// [GroupMember] menyimpan data untuk setiap anggota yang tergabung dalam perjalanan.
 class GroupMember {
   const GroupMember({
     required this.id,
@@ -19,17 +25,23 @@ class GroupMember {
   final String id;
   final String name;
   final MemberStatus status;
-  final LatLng position;
-  final double distanceMeters;
+  final LatLng position; // Titik koordinat di peta
+  final double distanceMeters; // Jarak anggota dengan pengguna saat ini
 
+  // Mengecek apakah anggota sedang terhubung
   bool get isOnline => status == MemberStatus.online;
 }
 
+/// Fungsi pembantu untuk memformat jarak agar mudah dibaca.
+/// Di bawah 1000m ditampilkan dalam meter (m), selain itu kilometer (km).
 String formatDistance(double m) =>
     m < 1000 ? '${m.round()} m' : '${(m / 1000).toStringAsFixed(1)} km';
 
+/// [MapPage] adalah halaman utama untuk fitur pelacakan grup.
 class MapPage extends StatefulWidget {
   const MapPage({super.key, required this.isHost});
+  
+  /// Jika true, pengguna ini adalah pembuat grup dan bisa melihat kode undangan.
   final bool isHost;
 
   @override
@@ -37,11 +49,13 @@ class MapPage extends StatefulWidget {
 }
 
 class _MapPageState extends State<MapPage> {
+  // Posisi kamera default saat peta pertama dimuat (contoh: Jakarta)
   static const _initialPosition = CameraPosition(
     target: LatLng(-6.200000, 106.816666),
     zoom: 14.4746,
   );
 
+  // Data mockup anggota grup
   // TODO: ganti dengan data dari backend / stream lokasi
   static const _members = <GroupMember>[
     GroupMember(
@@ -58,14 +72,16 @@ class _MapPageState extends State<MapPage> {
     ),
   ];
 
+  // Controller untuk memanipulasi Google Maps (misal: menggeser kamera)
   final _mapController = Completer<GoogleMapController>();
 
+  /// Mengubah list [_members] menjadi kumpulan [Marker] untuk ditampilkan di peta.
   Set<Marker> get _markers => {
         for (final m in _members)
           Marker(
             markerId: MarkerId(m.id),
             position: m.position,
-            alpha: m.isOnline ? 1 : 0.5,
+            alpha: m.isOnline ? 1 : 0.5, // Redupkan jika sedang offline
             icon: BitmapDescriptor.defaultMarkerWithHue(
               m.isOnline ? BitmapDescriptor.hueGreen : BitmapDescriptor.hueOrange,
             ),
@@ -75,11 +91,13 @@ class _MapPageState extends State<MapPage> {
           ),
       };
 
+  /// Mengarahkan kamera peta untuk fokus ke posisi anggota tertentu.
   Future<void> _focusOn(GroupMember m) async {
     final c = await _mapController.future;
     await c.animateCamera(CameraUpdate.newLatLngZoom(m.position, 16));
   }
 
+  /// Menampilkan dialog berisi kode undangan untuk dibagikan ke teman.
   void _showInviteCode() {
     const code = 'TRG-42A'; // TODO: ambil dari backend
     showDialog<void>(
@@ -96,6 +114,7 @@ class _MapPageState extends State<MapPage> {
         actions: [
           TextButton(
             onPressed: () {
+              // Menyalin teks ke clipboard perangkat
               Clipboard.setData(const ClipboardData(text: code));
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
@@ -113,6 +132,7 @@ class _MapPageState extends State<MapPage> {
     );
   }
 
+  /// Memunculkan konfirmasi ketika pengguna ingin keluar dari sesi pelacakan.
   Future<void> _confirmLeave() async {
     final leave = await showDialog<bool>(
       context: context,
@@ -149,6 +169,7 @@ class _MapPageState extends State<MapPage> {
       appBar: AppBar(
         title: const Text('Peta Real-time'),
         actions: [
+          // Tombol share hanya ditampilkan jika pengguna adalah host (pembuat grup)
           if (widget.isHost)
             IconButton(
               tooltip: 'Bagikan kode undangan',
@@ -161,21 +182,23 @@ class _MapPageState extends State<MapPage> {
         builder: (context, constraints) {
           return Stack(
             children: [
+              // Lapisan Peta
               GoogleMap(
                 initialCameraPosition: _initialPosition,
                 markers: _markers,
-                padding: EdgeInsets.only(bottom: constraints.maxHeight * 0.3), // Avoid Google Logo being covered
+                // Memberikan padding bawah agar logo Google tidak tertutup oleh panel bottom sheet
+                padding: EdgeInsets.only(bottom: constraints.maxHeight * 0.3),
                 onMapCreated: (c) {
                   if (!_mapController.isCompleted) _mapController.complete(c);
                 },
               ),
+              // Lapisan Panel Bawah yang dapat digeser (Draggable)
               DraggableScrollableSheet(
                 initialChildSize: 0.3,
                 minChildSize: 0.15,
                 maxChildSize: 0.6,
                 snap: true,
                 builder: (_, scrollController) => Material(
-                  // Use surface since surfaceContainerLowest might not be in older flutter
                   color: theme.colorScheme.surface,
                   elevation: 8,
                   clipBehavior: Clip.antiAlias,
@@ -184,9 +207,11 @@ class _MapPageState extends State<MapPage> {
                   child: CustomScrollView(
                     controller: scrollController,
                     slivers: [
+                      // Header panel
                       SliverToBoxAdapter(
                         child: Column(
                           children: [
+                            // Indikator garis (handle) untuk digeser
                             Container(
                               margin: const EdgeInsets.symmetric(
                                 vertical: AppSpacing.sm,
@@ -227,15 +252,17 @@ class _MapPageState extends State<MapPage> {
                           ],
                         ),
                       ),
+                      // Daftar anggota grup
                       SliverList.builder(
                         itemCount: _members.length,
                         itemBuilder: (_, i) {
                           final m = _members[i];
                           return ListTile(
-                            onTap: () => _focusOn(m),
+                            onTap: () => _focusOn(m), // Geser kamera saat anggota ditekan
                             leading: Stack(
                               children: [
                                 const CircleAvatar(child: Icon(Icons.person)),
+                                // Indikator titik status online/offline
                                 Positioned(
                                   right: 0,
                                   bottom: 0,
@@ -272,6 +299,7 @@ class _MapPageState extends State<MapPage> {
                           );
                         },
                       ),
+                      // Memberikan ruang kosong tambahan di bawah daftar agar tidak tertutup sistem navigasi
                       SliverToBoxAdapter(child: SizedBox(height: bottomInset)),
                     ],
                   ),

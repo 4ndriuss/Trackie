@@ -1,13 +1,17 @@
+// File: app_theme.dart
+// Mendefinisikan tema global untuk aplikasi, termasuk warna, tipografi, dan gaya komponen.
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
+/// Kelas [AppTheme] menyediakan pengaturan tema untuk aplikasi.
 class AppTheme {
-  // Colors based on DESIGN.md
+  // Warna utama yang digunakan di aplikasi, merujuk pada DESIGN.md
   static const Color primary = Color(0xFF1A1C1E);
   static const Color secondary = Color(0xFF6C7278);
   static const Color tertiary = Color(0xFFB8422E);
   static const Color neutral = Color(0xFFF7F5F2);
 
+  /// Menghasilkan tema terang (light theme) untuk aplikasi.
   static ThemeData get lightTheme {
     return ThemeData(
       scaffoldBackgroundColor: neutral,
@@ -18,9 +22,10 @@ class AppTheme {
         surface: neutral,
         error: tertiary,
       ),
+      // Pengaturan tipografi menggunakan font dari Google Fonts
       textTheme: TextTheme(
         displayLarge: GoogleFonts.publicSans(
-          fontSize: 48, // 3rem
+          fontSize: 48, // Setara dengan 3rem
           fontWeight: FontWeight.bold,
           color: primary,
           height: 1.1,
@@ -31,16 +36,17 @@ class AppTheme {
           color: primary,
         ),
         bodyMedium: GoogleFonts.publicSans(
-          fontSize: 16, // 1rem
+          fontSize: 16, // Setara dengan 1rem
           color: primary,
         ),
         labelSmall: GoogleFonts.spaceGrotesk(
-          fontSize: 12, // 0.75rem
+          fontSize: 12, // Setara dengan 0.75rem
           fontWeight: FontWeight.w600,
           letterSpacing: 1.0,
           color: primary,
         ),
       ),
+      // Pengaturan gaya AppBar
       appBarTheme: AppBarTheme(
         backgroundColor: Colors.white,
         elevation: 1,
@@ -51,12 +57,13 @@ class AppTheme {
           color: primary,
         ),
       ),
+      // Pengaturan gaya untuk input form (TextField)
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.white,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8), // rounded md
+          borderRadius: BorderRadius.circular(8), // Menggunakan rounded md
           borderSide: const BorderSide(color: secondary),
         ),
         enabledBorder: OutlineInputBorder(
@@ -71,13 +78,14 @@ class AppTheme {
         // ignore: deprecated_member_use
         hintStyle: GoogleFonts.publicSans(color: secondary.withOpacity(0.5)),
       ),
+      // Pengaturan gaya untuk ElevatedButton
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: tertiary,
           foregroundColor: Colors.white,
           elevation: 0,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(8), // rounded md
+            borderRadius: BorderRadius.circular(8), // Menggunakan rounded md
           ),
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           textStyle: GoogleFonts.spaceGrotesk(
@@ -87,6 +95,7 @@ class AppTheme {
           ),
         ),
       ),
+      // Pengaturan gaya untuk TextButton
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: tertiary,
@@ -99,6 +108,7 @@ class AppTheme {
   }
 }
 
+/// Kelas konstanta untuk spasi dan jarak (padding/margin) yang standar di aplikasi.
 class AppSpacing {
   static const double sm = 8.0;
   static const double md = 16.0;

@@ -1,21 +1,28 @@
+// File: home_tab.dart
+// Tab Beranda (Home) yang muncul pertama kali di [MainPage].
+// Menyediakan pilihan bagi pengguna untuk membuat perjalanan baru (sebagai Host)
+// atau bergabung dengan perjalanan yang sudah ada (menggunakan kode undangan).
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import '../widgets/custom_textfield.dart';
 import 'map_page.dart';
 
+/// [HomeTab] adalah widget stateless yang menampilkan menu utama aplikasi.
 class HomeTab extends StatelessWidget {
   const HomeTab({super.key});
 
+  /// Menampilkan modal bawah (bottom sheet) untuk membuat grup/perjalanan baru.
   void _showCreateGroupModal(BuildContext context) {
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true,
+      isScrollControlled: true, // Agar modal bisa menyesuaikan saat keyboard muncul
       backgroundColor: Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (context) {
         return Padding(
+          // Memberikan padding bawah sesuai tinggi keyboard (viewInsets.bottom)
           padding: EdgeInsets.only(
             bottom: MediaQuery.of(context).viewInsets.bottom,
             left: AppSpacing.lg,
@@ -23,7 +30,7 @@ class HomeTab extends StatelessWidget {
             top: AppSpacing.lg,
           ),
           child: Column(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisSize: MainAxisSize.min, // Tinggi kolom menyesuaikan konten
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
@@ -31,6 +38,7 @@ class HomeTab extends StatelessWidget {
                 style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 24),
               ),
               const SizedBox(height: AppSpacing.md),
+              // Input nama grup
               const CustomTextField(
                 label: 'Nama Grup',
                 hint: 'contoh: Touring Lembang',
@@ -38,6 +46,7 @@ class HomeTab extends StatelessWidget {
               const SizedBox(height: AppSpacing.md),
               Text('TIPE KENDARAAN', style: Theme.of(context).textTheme.labelSmall),
               const SizedBox(height: AppSpacing.sm),
+              // Dropdown untuk memilih jenis kendaraan yang digunakan grup
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(),
                 items: ['Motor', 'Mobil', 'Sepeda'].map((String value) {
@@ -50,9 +59,12 @@ class HomeTab extends StatelessWidget {
                 hint: const Text('Pilih Tipe Kendaraan'),
               ),
               const SizedBox(height: AppSpacing.xl),
+              // Tombol Mulai
               ElevatedButton(
                 onPressed: () {
+                  // Menutup modal
                   Navigator.pop(context);
+                  // Pindah ke MapPage sebagai pembuat grup (host)
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const MapPage(isHost: true)));
                 },
                 child: const Text('MULAI'),
@@ -65,6 +77,7 @@ class HomeTab extends StatelessWidget {
     );
   }
 
+  /// Menampilkan modal bawah (bottom sheet) untuk bergabung dengan grup/perjalanan yang sudah ada.
   void _showJoinGroupModal(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -90,14 +103,18 @@ class HomeTab extends StatelessWidget {
                 style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 24),
               ),
               const SizedBox(height: AppSpacing.md),
+              // Input kode undangan
               const CustomTextField(
                 label: 'Kode Undangan',
                 hint: 'contoh: TRG-42A',
               ),
               const SizedBox(height: AppSpacing.xl),
+              // Tombol Gabung
               ElevatedButton(
                 onPressed: () {
+                  // Menutup modal
                   Navigator.pop(context);
+                  // Pindah ke MapPage bukan sebagai host (isHost = false)
                   Navigator.push(context, MaterialPageRoute(builder: (_) => const MapPage(isHost: false)));
                 },
                 child: const Text('GABUNG'),
@@ -119,6 +136,7 @@ class HomeTab extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const SizedBox(height: AppSpacing.xl),
+            // Teks sambutan
             Text(
               'Halo, Rider!',
               style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 32),
@@ -131,6 +149,7 @@ class HomeTab extends StatelessWidget {
               ),
             ),
             const SizedBox(height: AppSpacing.xxl),
+            // Tombol utama untuk membuat perjalanan (warna solid)
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
@@ -139,6 +158,7 @@ class HomeTab extends StatelessWidget {
               child: const Text('BUAT PERJALANAN BARU'),
             ),
             const SizedBox(height: AppSpacing.md),
+            // Tombol sekunder untuk bergabung perjalanan (warna outline)
             OutlinedButton(
               style: OutlinedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
