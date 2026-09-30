@@ -4,6 +4,7 @@ import 'trip_detail_page.dart';
 import '../theme/app_theme.dart';
 
 // Dummy data model
+/// Model data untuk merepresentasikan riwayat perjalanan grup.
 class TripHistory {
   final String id;
   final String title;
@@ -22,6 +23,8 @@ class TripHistory {
   });
 }
 
+/// [HistoryTab] menampilkan daftar perjalanan yang pernah diikuti pengguna.
+/// Diambil dari histori data riwayat (saat ini menggunakan data dummy).
 class HistoryTab extends StatelessWidget {
   const HistoryTab({super.key});
 

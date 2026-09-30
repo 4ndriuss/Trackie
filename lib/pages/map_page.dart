@@ -10,7 +10,7 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../theme/app_theme.dart';
 
 /// Status anggota grup, menentukan warna indikator dan opasitas marker.
-enum MemberStatus { online, offline }
+enum MemberStatus { online, offline, sos }
 
 /// [GroupMember] menyimpan data untuk setiap anggota yang tergabung dalam perjalanan.
 class GroupMember {
@@ -28,8 +28,9 @@ class GroupMember {
   final LatLng position; // Titik koordinat di peta
   final double distanceMeters; // Jarak anggota dengan pengguna saat ini
 
-  // Mengecek apakah anggota sedang terhubung
-  bool get isOnline => status == MemberStatus.online;
+  // Mengecek status anggota
+  bool get isOnline => status == MemberStatus.online || status == MemberStatus.sos;
+  bool get isSos => status == MemberStatus.sos;
 }
 
 /// Fungsi pembantu untuk memformat jarak agar mudah dibaca.
@@ -57,16 +58,16 @@ class _MapPageState extends State<MapPage> {
 
   // Data mockup anggota grup
   // TODO: ganti dengan data dari backend / stream lokasi
-  static const _members = <GroupMember>[
-    GroupMember(
+  final List<GroupMember> _members = [
+    const GroupMember(
       id: 'anda', name: 'Anda', status: MemberStatus.online,
       position: LatLng(-6.200000, 106.816666), distanceMeters: 0,
     ),
-    GroupMember(
+    const GroupMember(
       id: 'budi', name: 'Budi (NMAX Hitam)', status: MemberStatus.online,
       position: LatLng(-6.201000, 106.817666), distanceMeters: 120,
     ),
-    GroupMember(
+    const GroupMember(
       id: 'citra', name: 'Citra (Vario)', status: MemberStatus.offline,
       position: LatLng(-6.210000, 106.820666), distanceMeters: 1500,
     ),
@@ -83,10 +84,12 @@ class _MapPageState extends State<MapPage> {
             position: m.position,
             alpha: m.isOnline ? 1 : 0.5, // Redupkan jika sedang offline
             icon: BitmapDescriptor.defaultMarkerWithHue(
-              m.isOnline ? BitmapDescriptor.hueGreen : BitmapDescriptor.hueOrange,
+              m.isSos 
+                  ? BitmapDescriptor.hueRed 
+                  : (m.isOnline ? BitmapDescriptor.hueGreen : BitmapDescriptor.hueOrange),
             ),
             infoWindow: InfoWindow(
-              title: m.isOnline ? m.name : '${m.name} - Terputus',
+              title: m.isSos ? '🚨 ${m.name} - SOS!' : (m.isOnline ? m.name : '${m.name} - Terputus'),
             ),
           ),
       };
@@ -160,6 +163,57 @@ class _MapPageState extends State<MapPage> {
     }
   }
 
+  Future<void> _triggerSOS() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('🚨 Tekan Tombol Darurat?'),
+        content: const Text(
+          'Gunakan hanya jika Anda mengalami kecelakaan, mogok, atau butuh bantuan mendesak. '
+          'Seluruh anggota grup akan menerima alarm peringatan.'
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('BATAL'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Theme.of(ctx).colorScheme.error,
+              foregroundColor: Colors.white,
+            ),
+            child: const Text('KIRIM SOS'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      setState(() {
+        // Simulasi: Mengubah status 'Anda' menjadi SOS
+        final index = _members.indexWhere((m) => m.id == 'anda');
+        if (index != -1) {
+          final me = _members[index];
+          _members[index] = GroupMember(
+            id: me.id,
+            name: me.name,
+            status: MemberStatus.sos,
+            position: me.position,
+            distanceMeters: me.distanceMeters,
+          );
+        }
+      });
+      // TODO: Panggil API Backend untuk membunyikan sirine di semua HP
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('🚨 Sinyal DARURAT telah dikirim ke rombongan!'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
@@ -191,6 +245,22 @@ class _MapPageState extends State<MapPage> {
                 onMapCreated: (c) {
                   if (!_mapController.isCompleted) _mapController.complete(c);
                 },
+              ),
+              // Tombol SOS Mengambang
+              Positioned(
+                top: AppSpacing.md,
+                right: AppSpacing.md,
+                child: FloatingActionButton.extended(
+                  heroTag: 'btn_sos',
+                  onPressed: _triggerSOS,
+                  backgroundColor: theme.colorScheme.error,
+                  foregroundColor: Colors.white,
+                  icon: const Icon(Icons.warning_amber_rounded, size: 28),
+                  label: const Text(
+                    'SOS',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                ),
               ),
               // Lapisan Panel Bawah yang dapat digeser (Draggable)
               DraggableScrollableSheet(
@@ -259,9 +329,14 @@ class _MapPageState extends State<MapPage> {
                           final m = _members[i];
                           return ListTile(
                             onTap: () => _focusOn(m), // Geser kamera saat anggota ditekan
+                            tileColor: m.isSos ? theme.colorScheme.error.withOpacity(0.1) : null, // ignore: deprecated_member_use
                             leading: Stack(
                               children: [
-                                const CircleAvatar(child: Icon(Icons.person)),
+                                CircleAvatar(
+                                  backgroundColor: m.isSos ? theme.colorScheme.error : null,
+                                  foregroundColor: m.isSos ? Colors.white : null,
+                                  child: Icon(m.isSos ? Icons.warning : Icons.person),
+                                ),
                                 // Indikator titik status online/offline
                                 Positioned(
                                   right: 0,
@@ -270,7 +345,9 @@ class _MapPageState extends State<MapPage> {
                                     width: 12,
                                     height: 12,
                                     decoration: BoxDecoration(
-                                      color: m.isOnline ? Colors.green : Colors.grey,
+                                      color: m.isSos 
+                                          ? theme.colorScheme.error 
+                                          : (m.isOnline ? Colors.green : Colors.grey),
                                       shape: BoxShape.circle,
                                       border: Border.all(
                                         color: theme.colorScheme.surface,
@@ -281,9 +358,19 @@ class _MapPageState extends State<MapPage> {
                                 ),
                               ],
                             ),
-                            title: Text(m.name),
+                            title: Text(
+                              m.name,
+                              style: TextStyle(
+                                fontWeight: m.isSos ? FontWeight.bold : FontWeight.normal,
+                                color: m.isSos ? theme.colorScheme.error : null,
+                              ),
+                            ),
                             subtitle: Text(
-                              m.isOnline ? 'Terhubung' : 'Terputus sinyal',
+                              m.isSos ? '🚨 BUTUH BANTUAN!' : (m.isOnline ? 'Terhubung' : 'Terputus sinyal'),
+                              style: TextStyle(
+                                color: m.isSos ? theme.colorScheme.error : null,
+                                fontWeight: m.isSos ? FontWeight.bold : FontWeight.normal,
+                              ),
                             ),
                             trailing: Column(
                               mainAxisAlignment: MainAxisAlignment.center,

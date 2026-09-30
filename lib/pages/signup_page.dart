@@ -6,7 +6,8 @@ import '../theme/app_theme.dart';
 import '../widgets/custom_textfield.dart';
 import 'main_page.dart';
 
-/// [SignupPage] adalah widget stateful yang menampilkan form pendaftaran akun.
+/// [SignupPage] menangani proses registrasi akun baru.
+/// Menerima input nama, email, kata sandi, dan informasi kendaraan.
 class SignupPage extends StatefulWidget {
   const SignupPage({super.key});
 

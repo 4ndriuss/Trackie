@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import 'home_tab.dart';
 import 'history_tab.dart';
+import 'profile_tab.dart';
 
 /// [MainPage] adalah kerangka utama yang mengatur navigasi berbasis tab di aplikasi.
 class MainPage extends StatefulWidget {
@@ -21,7 +22,7 @@ class _MainPageState extends State<MainPage> {
   final List<Widget> _tabs = [
     const HomeTab(), // Tab Home (Beranda)
     const HistoryTab(), // Tab Riwayat (History)
-    const Center(child: Text('Profil User akan tampil di sini')), // Tab Profil (Profile)
+    const ProfileTab(), // Tab Profil (Profile)
   ];
 
   @override

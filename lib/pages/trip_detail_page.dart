@@ -5,6 +5,9 @@ import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../theme/app_theme.dart';
 import 'history_tab.dart'; // To access TripHistory model
 
+/// Halaman [TripDetailPage] menampilkan detail rute perjalanan dari histori.
+/// Merender `GoogleMap` statis yang memperlihatkan polyline rute dan ringkasan 
+/// informasi jarak serta durasi perjalanan.
 class TripDetailPage extends StatefulWidget {
   final TripHistory trip;
 

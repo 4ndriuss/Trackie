@@ -7,7 +7,9 @@ import '../theme/app_theme.dart';
 import '../widgets/custom_textfield.dart';
 import 'map_page.dart';
 
-/// [HomeTab] adalah widget stateless yang menampilkan menu utama aplikasi.
+/// Halaman Beranda utama [HomeTab] bagi pengguna.
+/// Menyediakan akses cepat untuk membuat perjalanan baru (Host) atau
+/// bergabung ke perjalanan yang sudah ada via kode undangan.
 class HomeTab extends StatelessWidget {
   const HomeTab({super.key});
 
@@ -129,49 +131,218 @@ class HomeTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
+    // Data Dummy untuk presentasi UI
+    final bool hasActiveTrip = true;
+    final List<Map<String, dynamic>> upcomingTrips = [
+      {
+        'title': 'Sunmori Puncak Pas',
+        'date': '12 Okt 2026 • 06:00',
+        'members': 8,
+      },
+      {
+        'title': 'Touring Lintas Provinsi',
+        'date': '20 Okt 2026 • 05:30',
+        'members': 14,
+      },
+    ];
+
     return SafeArea(
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.all(AppSpacing.lg),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const SizedBox(height: AppSpacing.xl),
-            // Teks sambutan
+            const SizedBox(height: AppSpacing.sm),
             Text(
-              'Halo, Rider!',
-              style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 32),
+              'Halo, Rider! 👋',
+              style: theme.textTheme.displayLarge?.copyWith(fontSize: 32),
             ),
             const SizedBox(height: AppSpacing.sm),
             Text(
               'Siap untuk perjalanan hari ini?',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: Theme.of(context).colorScheme.secondary,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.secondary,
               ),
+            ),
+            const SizedBox(height: AppSpacing.xl),
+
+            // 1. Banner Perjalanan Aktif (Active Trip)
+            if (hasActiveTrip) ...[
+              Container(
+                padding: const EdgeInsets.all(AppSpacing.md),
+                decoration: BoxDecoration(
+                  color: theme.colorScheme.error, // Pakai warna merah/tertiary agar mencolok
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: theme.colorScheme.error.withOpacity(0.3), // ignore: deprecated_member_use
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2), // ignore: deprecated_member_use
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(Icons.navigation_rounded, color: Colors.white, size: 32),
+                    ),
+                    const SizedBox(width: AppSpacing.md),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Sedang dalam perjalanan',
+                            style: TextStyle(color: Colors.white70, fontSize: 12),
+                          ),
+                          const SizedBox(height: 2),
+                          const Text(
+                            'Touring Bali 2026',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.arrow_forward_ios, color: Colors.white),
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const MapPage(isHost: false),
+                          ),
+                        );
+                      },
+                    )
+                  ],
+                ),
+              ),
+              const SizedBox(height: AppSpacing.xl),
+            ],
+
+            // 2. Tombol Aksi Cepat (Buat & Gabung)
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showCreateGroupModal(context),
+                    icon: const Icon(Icons.add_road),
+                    label: const Text('Buat'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: theme.primaryColor,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.md),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showJoinGroupModal(context),
+                    icon: const Icon(Icons.group_add),
+                    label: const Text('Gabung'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      side: BorderSide(color: theme.primaryColor),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      textStyle: theme.textTheme.labelSmall?.copyWith(fontSize: 14),
+                    ),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: AppSpacing.xxl),
-            // Tombol utama untuk membuat perjalanan (warna solid)
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
-              ),
-              onPressed: () => _showCreateGroupModal(context),
-              child: const Text('BUAT PERJALANAN BARU'),
-            ),
-            const SizedBox(height: AppSpacing.md),
-            // Tombol sekunder untuk bergabung perjalanan (warna outline)
-            OutlinedButton(
-              style: OutlinedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(vertical: AppSpacing.xl),
-                foregroundColor: Theme.of(context).primaryColor,
-                side: BorderSide(color: Theme.of(context).colorScheme.secondary),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
+
+            // 3. Jadwal Akan Datang (Upcoming Trips)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Jadwal Mendatang',
+                  style: theme.textTheme.titleMedium,
                 ),
-                textStyle: Theme.of(context).textTheme.labelSmall?.copyWith(fontSize: 16),
-              ),
-              onPressed: () => _showJoinGroupModal(context),
-              child: const Text('GABUNG PERJALANAN'),
+                TextButton(
+                  onPressed: () {},
+                  child: const Text('Lihat Semua'),
+                ),
+              ],
             ),
+            const SizedBox(height: AppSpacing.sm),
+            
+            ...upcomingTrips.map((trip) {
+              return Container(
+                margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: theme.colorScheme.secondary.withOpacity(0.2), // ignore: deprecated_member_use
+                  ),
+                ),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: AppSpacing.md,
+                    vertical: AppSpacing.sm,
+                  ),
+                  leading: Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.secondary.withOpacity(0.1), // ignore: deprecated_member_use
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(Icons.calendar_month, color: theme.colorScheme.secondary),
+                  ),
+                  title: Text(
+                    trip['title'],
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 4.0),
+                    child: Row(
+                      children: [
+                        Icon(Icons.access_time, size: 14, color: theme.colorScheme.secondary),
+                        const SizedBox(width: 4),
+                        Text(trip['date']),
+                      ],
+                    ),
+                  ),
+                  trailing: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: theme.primaryColor.withOpacity(0.1), // ignore: deprecated_member_use
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.people, size: 14, color: theme.primaryColor),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${trip['members']}',
+                          style: TextStyle(
+                            color: theme.primaryColor,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }),
           ],
         ),
       ),
