@@ -60,6 +60,7 @@ class _ProfileTabState extends State<ProfileTab> {
         ),
         const SizedBox(height: 4),
         Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
             Text(
@@ -175,19 +176,19 @@ class _ProfileTabState extends State<ProfileTab> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        _buildStatItem(context, 'Total Jarak', '2.450', 'km'),
+                        Expanded(child: _buildStatItem(context, 'Total Jarak', '2.450', 'km')),
                         Container(
                           width: 1,
                           height: 40,
                           color: theme.colorScheme.secondary.withOpacity(0.2), // ignore: deprecated_member_use
                         ),
-                        _buildStatItem(context, 'Touring', '12', 'kali'),
+                        Expanded(child: _buildStatItem(context, 'Touring', '12', 'kali')),
                         Container(
                           width: 1,
                           height: 40,
                           color: theme.colorScheme.secondary.withOpacity(0.2), // ignore: deprecated_member_use
                         ),
-                        _buildStatItem(context, 'Rank', 'Veteran', '⭐️'),
+                        Expanded(child: _buildStatItem(context, 'Rank', 'Veteran', '⭐️')),
                       ],
                     ),
                   ),

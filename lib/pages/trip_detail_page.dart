@@ -152,6 +152,24 @@ class _TripDetailPageState extends State<TripDetailPage> {
                       ),
                     ],
                   ),
+                  const SizedBox(height: AppSpacing.xl),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('📸 Menyiapkan gambar rute untuk dibagikan...'),
+                          ),
+                        );
+                      },
+                      icon: const Icon(Icons.share),
+                      label: const Text('BAGIKAN RUTE'),
+                      style: ElevatedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
