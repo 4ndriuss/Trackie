@@ -106,6 +106,108 @@ class AppTheme {
       ),
     );
   }
+
+  /// Menghasilkan tema gelap (dark theme) untuk aplikasi.
+  static ThemeData get darkTheme {
+    const Color darkBg = primary;
+    const Color darkSurface = Color(0xFF2D3035);
+    const Color darkText = neutral;
+
+    return ThemeData(
+      scaffoldBackgroundColor: darkBg,
+      primaryColor: darkText,
+      colorScheme: const ColorScheme.dark(
+        primary: darkText,
+        secondary: secondary,
+        surface: darkSurface,
+        error: tertiary,
+      ),
+      textTheme: TextTheme(
+        displayLarge: GoogleFonts.publicSans(
+          fontSize: 48,
+          fontWeight: FontWeight.bold,
+          color: darkText,
+          height: 1.1,
+        ),
+        titleMedium: GoogleFonts.publicSans(
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+          color: darkText,
+        ),
+        bodyMedium: GoogleFonts.publicSans(
+          fontSize: 16,
+          color: darkText,
+        ),
+        labelSmall: GoogleFonts.spaceGrotesk(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 1.0,
+          color: darkText,
+        ),
+      ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: darkSurface,
+        elevation: 1,
+        iconTheme: const IconThemeData(color: darkText),
+        titleTextStyle: GoogleFonts.publicSans(
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+          color: darkText,
+        ),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: true,
+        fillColor: darkBg,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: secondary),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: secondary, width: 0.5),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: darkText, width: 2),
+        ),
+        labelStyle: GoogleFonts.publicSans(color: secondary),
+        // ignore: deprecated_member_use
+        hintStyle: GoogleFonts.publicSans(color: secondary.withOpacity(0.5)),
+      ),
+      elevatedButtonTheme: ElevatedButtonThemeData(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: tertiary,
+          foregroundColor: Colors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+          textStyle: GoogleFonts.spaceGrotesk(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 1.2,
+          ),
+        ),
+      ),
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: tertiary,
+          textStyle: GoogleFonts.publicSans(
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: darkText,
+          side: const BorderSide(color: darkText),
+        ),
+      ),
+      dividerColor: secondary.withOpacity(0.3), // ignore: deprecated_member_use
+    );
+  }
 }
 
 /// Kelas konstanta untuk spasi dan jarak (padding/margin) yang standar di aplikasi.

@@ -10,6 +10,9 @@ void main() {
   runApp(const TrackieApp());
 }
 
+/// State global sederhana untuk mengatur tema (MVP)
+final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.light);
+
 /// Kelas utama aplikasi Trackie.
 /// Merupakan root widget dari seluruh aplikasi.
 class TrackieApp extends StatelessWidget {
@@ -17,14 +20,18 @@ class TrackieApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Trackie',
-      // Menggunakan tema yang didefinisikan di AppTheme
-      theme: AppTheme.lightTheme,
-      // Aktifkan banner debug untuk membantu memastikan apakah Flutter berhasil merender UI
-      debugShowCheckedModeBanner: true,
-      // Halaman pertama yang dimuat saat aplikasi dijalankan
-      home: const LoginPage(),
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: themeNotifier,
+      builder: (context, ThemeMode currentMode, child) {
+        return MaterialApp(
+          title: 'Trackie',
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: currentMode,
+          debugShowCheckedModeBanner: true,
+          home: const LoginPage(),
+        );
+      },
     );
   }
 }

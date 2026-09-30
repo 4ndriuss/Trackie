@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
 import 'login_page.dart';
+import '../main.dart';
 
 /// [ProfileTab] menampilkan informasi akun pengguna.
 /// Menampilkan foto profil, nama, informasi kendaraan, 
@@ -158,7 +159,7 @@ class _ProfileTabState extends State<ProfileTab> {
                   Container(
                     padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: theme.colorScheme.surface,
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
                         color: theme.colorScheme.secondary.withOpacity(0.2), // ignore: deprecated_member_use
@@ -196,7 +197,7 @@ class _ProfileTabState extends State<ProfileTab> {
                   // Pengaturan Privasi (Ghost Mode)
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: theme.colorScheme.surface,
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
                         color: theme.colorScheme.secondary.withOpacity(0.2), // ignore: deprecated_member_use
@@ -235,6 +236,47 @@ class _ProfileTabState extends State<ProfileTab> {
                       ),
                       activeTrackColor: theme.colorScheme.error.withOpacity(0.5), // ignore: deprecated_member_use
                       activeThumbColor: theme.colorScheme.error,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
+                  
+                  // Pengaturan Tema (Light/Dark Mode)
+                  Container(
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: theme.colorScheme.secondary.withOpacity(0.2), // ignore: deprecated_member_use
+                      ),
+                    ),
+                    child: ValueListenableBuilder<ThemeMode>(
+                      valueListenable: themeNotifier,
+                      builder: (context, currentMode, child) {
+                        final isDark = currentMode == ThemeMode.dark;
+                        return SwitchListTile(
+                          value: isDark,
+                          onChanged: (value) {
+                            themeNotifier.value = value ? ThemeMode.dark : ThemeMode.light;
+                          },
+                          title: const Text('Mode Gelap (Dark Mode)', style: TextStyle(fontWeight: FontWeight.bold)),
+                          subtitle: const Text('Ubah tampilan aplikasi menjadi gelap.'),
+                          secondary: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: isDark 
+                                  ? theme.primaryColor.withOpacity(0.1) // ignore: deprecated_member_use
+                                  : theme.colorScheme.secondary.withOpacity(0.1), // ignore: deprecated_member_use
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              isDark ? Icons.dark_mode : Icons.light_mode,
+                              color: isDark ? theme.primaryColor : theme.colorScheme.secondary,
+                            ),
+                          ),
+                          activeTrackColor: theme.primaryColor.withOpacity(0.5), // ignore: deprecated_member_use
+                          activeThumbColor: theme.primaryColor,
+                        );
+                      },
                     ),
                   ),
 
