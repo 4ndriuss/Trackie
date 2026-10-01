@@ -1,7 +1,13 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../theme/app_theme.dart';
-import 'login_page.dart';
-import '../main.dart';
+import '../providers/auth_provider.dart';
+import 'privacy_policy_page.dart';
+import 'preferences_page.dart';
+import 'account_page.dart';
 
 /// [ProfileTab] menampilkan informasi akun pengguna.
 /// Menampilkan foto profil, nama, informasi kendaraan, 
@@ -28,14 +34,9 @@ class _ProfileTabState extends State<ProfileTab> {
             child: const Text('BATAL'),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx); // Tutup dialog
-              // Arahkan kembali ke halaman Login dan hapus seluruh riwayat halaman
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (_) => const LoginPage()),
-                (route) => false,
-              );
+              await context.read<AuthProvider>().logout();
             },
             style: TextButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.error,
@@ -43,6 +44,72 @@ class _ProfileTabState extends State<ProfileTab> {
             child: const Text('KELUAR'),
           ),
         ],
+      ),
+    );
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(
+      source: source,
+      maxWidth: 800,
+      maxHeight: 800,
+      imageQuality: 80,
+    );
+
+    if (pickedFile != null && mounted) {
+      final file = File(pickedFile.path);
+      final authProvider = context.read<AuthProvider>();
+      
+      final success = await authProvider.uploadProfilePicture(file);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(success 
+                ? '✅ Foto profil berhasil diperbarui' 
+                : '❌ Gagal memperbarui foto profil'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  void _showImagePicker(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(AppSpacing.md),
+              child: Text(
+                'Ubah Foto Profil',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.camera_alt),
+              title: const Text('Ambil dari Kamera'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _pickImage(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library),
+              title: const Text('Pilih dari Galeri'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _pickImage(ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -87,6 +154,8 @@ class _ProfileTabState extends State<ProfileTab> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final authProvider = context.watch<AuthProvider>();
+    final userProfile = authProvider.userProfile;
     
     return SafeArea(
       child: Column(
@@ -106,19 +175,52 @@ class _ProfileTabState extends State<ProfileTab> {
                 children: [
                   const SizedBox(height: AppSpacing.md),
                   // Foto Profil
-                  CircleAvatar(
-                    radius: 60,
-                    backgroundColor: theme.primaryColor.withOpacity(0.1), // ignore: deprecated_member_use
-                    child: Icon(
-                      Icons.person,
-                      size: 60,
-                      color: theme.primaryColor,
+                  GestureDetector(
+                    onTap: () => _showImagePicker(context),
+                    child: Stack(
+                      children: [
+                        CircleAvatar(
+                          radius: 60,
+                          backgroundColor: theme.primaryColor.withOpacity(0.1), // ignore: deprecated_member_use
+                          backgroundImage: userProfile?.photoUrl != null
+                              ? CachedNetworkImageProvider(userProfile!.photoUrl!)
+                              : null,
+                          child: userProfile?.photoUrl == null
+                              ? Icon(
+                                  Icons.person,
+                                  size: 60,
+                                  color: theme.primaryColor,
+                                )
+                              : null,
+                        ),
+                        if (authProvider.isLoading)
+                          const Positioned.fill(
+                            child: CircularProgressIndicator(),
+                          ),
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: theme.primaryColor,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: theme.scaffoldBackgroundColor, width: 2),
+                            ),
+                            child: const Icon(
+                              Icons.camera_alt,
+                              size: 20,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   const SizedBox(height: AppSpacing.lg),
                   // Nama Pengguna
                   Text(
-                    'John Doe',
+                    userProfile?.name ?? 'User',
                     style: theme.textTheme.titleMedium?.copyWith(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
@@ -145,7 +247,7 @@ class _ProfileTabState extends State<ProfileTab> {
                         ),
                         const SizedBox(width: 4),
                         Text(
-                          'NMAX Hitam',
+                          (userProfile?.vehicle != null && userProfile!.vehicle.isNotEmpty) ? userProfile.vehicle : '-',
                           style: theme.textTheme.bodyMedium?.copyWith(
                             color: theme.colorScheme.secondary,
                             fontWeight: FontWeight.w600,
@@ -239,9 +341,24 @@ class _ProfileTabState extends State<ProfileTab> {
                       activeThumbColor: theme.colorScheme.error,
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.md),
-                  
-                  // Pengaturan Tema (Light/Dark Mode)
+
+                  const SizedBox(height: AppSpacing.xl),
+
+                  // === MENU PENGATURAN ===
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: Padding(
+                      padding: const EdgeInsets.only(left: 4),
+                      child: Text(
+                        'PENGATURAN',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: theme.colorScheme.secondary,
+                          letterSpacing: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.sm),
                   Container(
                     decoration: BoxDecoration(
                       color: theme.colorScheme.surface,
@@ -250,63 +367,57 @@ class _ProfileTabState extends State<ProfileTab> {
                         color: theme.colorScheme.secondary.withOpacity(0.2), // ignore: deprecated_member_use
                       ),
                     ),
-                    child: ValueListenableBuilder<ThemeMode>(
-                      valueListenable: themeNotifier,
-                      builder: (context, currentMode, child) {
-                        final isDark = currentMode == ThemeMode.dark;
-                        return SwitchListTile(
-                          value: isDark,
-                          onChanged: (value) {
-                            themeNotifier.value = value ? ThemeMode.dark : ThemeMode.light;
+                    child: Column(
+                      children: [
+                        // Preferensi
+                        _buildMenuTile(
+                          theme,
+                          icon: Icons.tune,
+                          iconColor: Colors.blue,
+                          title: 'Preferensi',
+                          subtitle: 'Bahasa, tampilan',
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const PreferencesPage()),
+                            );
                           },
-                          title: const Text('Mode Gelap (Dark Mode)', style: TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: const Text('Ubah tampilan aplikasi menjadi gelap.'),
-                          secondary: Container(
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              color: isDark 
-                                  ? theme.primaryColor.withOpacity(0.1) // ignore: deprecated_member_use
-                                  : theme.colorScheme.secondary.withOpacity(0.1), // ignore: deprecated_member_use
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              isDark ? Icons.dark_mode : Icons.light_mode,
-                              color: isDark ? theme.primaryColor : theme.colorScheme.secondary,
-                            ),
-                          ),
-                          activeTrackColor: theme.primaryColor.withOpacity(0.5), // ignore: deprecated_member_use
-                          activeThumbColor: theme.primaryColor,
-                        );
-                      },
+                        ),
+                        _buildMenuDivider(theme),
+                        // Akun
+                        _buildMenuTile(
+                          theme,
+                          icon: Icons.manage_accounts_outlined,
+                          iconColor: Colors.teal,
+                          title: 'Akun',
+                          subtitle: 'Profil, password, hapus akun',
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const AccountPage()),
+                            );
+                          },
+                        ),
+                        _buildMenuDivider(theme),
+                        // Kebijakan Privasi
+                        _buildMenuTile(
+                          theme,
+                          icon: Icons.privacy_tip_outlined,
+                          iconColor: Colors.orange,
+                          title: 'Kebijakan Privasi',
+                          subtitle: 'Baca kebijakan privasi kami',
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (_) => const PrivacyPolicyPage()),
+                            );
+                          },
+                        ),
+                      ],
                     ),
                   ),
 
                   const SizedBox(height: AppSpacing.xxl),
-                  // Tombol Edit Profile
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('Fitur Edit Profil akan segera hadir!')),
-                        );
-                      },
-                      icon: const Icon(Icons.edit),
-                      label: const Text('Edit Profile'),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                        side: BorderSide(color: theme.primaryColor),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        textStyle: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
                   // Tombol Log Out
                   SizedBox(
                     width: double.infinity,
@@ -320,12 +431,57 @@ class _ProfileTabState extends State<ProfileTab> {
                       ),
                     ),
                   ),
+                  const SizedBox(height: AppSpacing.lg),
+                  // Versi Aplikasi
+                  Text(
+                    'Trackie v1.0.0',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: theme.colorScheme.secondary.withOpacity(0.5), // ignore: deprecated_member_use
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.md),
                 ],
               ),
             ),
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildMenuTile(
+    ThemeData theme, {
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return ListTile(
+      leading: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          color: iconColor.withOpacity(0.1), // ignore: deprecated_member_use
+          shape: BoxShape.circle,
+        ),
+        child: Icon(icon, color: iconColor, size: 20),
+      ),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
+      subtitle: Text(subtitle),
+      trailing: Icon(Icons.chevron_right, color: theme.colorScheme.secondary),
+      onTap: onTap,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+    );
+  }
+
+  Widget _buildMenuDivider(ThemeData theme) {
+    return Divider(
+      height: 1,
+      indent: AppSpacing.md,
+      endIndent: AppSpacing.md,
+      color: theme.colorScheme.secondary.withOpacity(0.15), // ignore: deprecated_member_use
     );
   }
 }

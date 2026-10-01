@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 import 'trip_detail_page.dart';
 import '../theme/app_theme.dart';
 
@@ -113,7 +114,24 @@ class HistoryTab extends StatelessWidget {
                           ),
                         ],
                       ),
-                      const SizedBox(width: AppSpacing.sm),
+                      const SizedBox(width: 4),
+                      IconButton(
+                        icon: Icon(
+                          Icons.share_outlined,
+                          size: 20,
+                          color: Theme.of(context).colorScheme.secondary,
+                        ),
+                        tooltip: 'Bagikan',
+                        onPressed: () {
+                          final dateStr = '${trip.date.day}/${trip.date.month}/${trip.date.year}';
+                          final text = '🏍️ *${trip.title}*\n'
+                              '📅 $dateStr\n'
+                              '📏 Jarak: ${trip.distanceKm} km\n'
+                              '⏱️ Durasi: ${trip.duration}\n'
+                              '\n— Dibagikan dari Trackie 🏁';
+                          SharePlus.instance.share(ShareParams(text: text));
+                        },
+                      ),
                       const Icon(Icons.chevron_right, size: 20),
                     ],
                   ),

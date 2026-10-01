@@ -38,6 +38,27 @@ dependencies:
   google_maps_flutter: ^2.18.2
   geolocator: ^14.1.1
 
+  # Firebase
+  firebase_core: ^3.12.1
+  firebase_auth: ^5.5.1
+  cloud_firestore: ^5.6.5
+  firebase_database: ^11.3.5
+
+  # State Management
+  provider: ^6.1.4
+
+  # Utilities
+  uuid: ^4.5.1
+
+  # Background Location Tracking
+  flutter_background_service: ^5.1.0
+  flutter_local_notifications: ^18.0.1
+  permission_handler: ^11.3.1
+  share_plus: ^13.3.0
+  image_picker: ^1.2.3
+  firebase_storage: ^12.4.10
+  cached_network_image: ^4.0.4
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
