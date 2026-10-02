@@ -11,6 +11,9 @@ class GroupModel {
   /// Tipe kendaraan grup ('motor', 'mobil', 'sepeda')
   final String type;
 
+  /// Tujuan perjalanan
+  final String destination;
+
   /// Kode unik undangan (format TRG-XXX)
   final String inviteCode;
 
@@ -34,6 +37,7 @@ class GroupModel {
     required this.id,
     required this.name,
     required this.type,
+    required this.destination,
     required this.inviteCode,
     required this.hostUid,
     required this.memberUids,
@@ -74,6 +78,7 @@ class GroupModel {
       id: id ?? map['id'] as String? ?? '',
       name: map['name'] as String? ?? '',
       type: map['type'] as String? ?? 'motor',
+      destination: map['destination'] as String? ?? '',
       inviteCode: map['inviteCode'] as String? ?? '',
       hostUid: map['hostUid'] as String? ?? '',
       memberUids: members,
@@ -89,6 +94,7 @@ class GroupModel {
       'id': id,
       'name': name,
       'type': type,
+      'destination': destination,
       'inviteCode': inviteCode,
       'hostUid': hostUid,
       'memberUids': memberUids,
@@ -106,6 +112,7 @@ class GroupModel {
     String? id,
     String? name,
     String? type,
+    String? destination,
     String? inviteCode,
     String? hostUid,
     List<String>? memberUids,
@@ -117,6 +124,7 @@ class GroupModel {
       id: id ?? this.id,
       name: name ?? this.name,
       type: type ?? this.type,
+      destination: destination ?? this.destination,
       inviteCode: inviteCode ?? this.inviteCode,
       hostUid: hostUid ?? this.hostUid,
       memberUids: memberUids ?? List<String>.from(this.memberUids),

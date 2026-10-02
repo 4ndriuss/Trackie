@@ -15,13 +15,13 @@ class GroupProvider extends ChangeNotifier {
   String? get error => _error;
   
   // Create a new group
-  Future<bool> createGroup({required String name, required String type, required String hostUid}) async {
+  Future<bool> createGroup({required String name, required String type, required String destination, required String hostUid}) async {
     try {
       _isLoading = true;
       _error = null;
       notifyListeners();
       
-      _activeGroup = await _groupService.createGroup(name: name, type: type, hostUid: hostUid);
+      _activeGroup = await _groupService.createGroup(name: name, type: type, destination: destination, hostUid: hostUid);
       _isLoading = false;
       notifyListeners();
       return _activeGroup != null;

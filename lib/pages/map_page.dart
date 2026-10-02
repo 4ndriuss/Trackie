@@ -6,8 +6,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:share_plus/share_plus.dart';
 import '../theme/app_theme.dart';
+import '../providers/group_provider.dart';
 
 /// Status anggota grup, menentukan warna indikator dan opasitas marker.
 enum MemberStatus { online, offline, sos }
@@ -102,29 +105,63 @@ class _MapPageState extends State<MapPage> {
 
   /// Menampilkan dialog berisi kode undangan untuk dibagikan ke teman.
   void _showInviteCode() {
-    const code = 'TRG-42A'; // TODO: ambil dari backend
+    final groupProvider = context.read<GroupProvider>();
+    final code = groupProvider.activeGroup?.inviteCode ?? 'TIDAK-ADA-KODE';
+    final link = 'https://trackie.app/join/$code';
+
     showDialog<void>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Kode Undangan'),
-        content: SelectableText(
-          code,
-          textAlign: TextAlign.center,
-          style: const TextStyle(
-            fontSize: 32, letterSpacing: 2.0, fontWeight: FontWeight.bold,
-          ),
+        title: const Text('Undang Teman'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Bagikan kode ini untuk bergabung:'),
+            const SizedBox(height: 8),
+            SelectableText(
+              code,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 32, letterSpacing: 2.0, fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text('Atau bagikan link berikut:'),
+            const SizedBox(height: 8),
+            SelectableText(
+              link,
+              textAlign: TextAlign.center,
+              style: const TextStyle(fontSize: 14, color: Colors.blue),
+            ),
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () {
-              // Menyalin teks ke clipboard perangkat
-              Clipboard.setData(const ClipboardData(text: code));
+              Clipboard.setData(ClipboardData(text: code));
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(content: Text('Kode disalin')),
               );
             },
-            child: const Text('SALIN'),
+            child: const Text('SALIN KODE'),
+          ),
+          TextButton(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: link));
+              Navigator.pop(ctx);
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Link disalin')),
+              );
+            },
+            child: const Text('SALIN LINK'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              Share.share('Ayo gabung perjalanan saya di Trackie! Gunakan kode: $code atau klik link ini: $link');
+            },
+            child: const Text('BAGIKAN'),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx),

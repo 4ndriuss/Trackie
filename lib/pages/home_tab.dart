@@ -25,6 +25,7 @@ class _HomeTabState extends State<HomeTab> {
   /// Menampilkan modal bawah (bottom sheet) untuk membuat grup/perjalanan baru.
   void _showCreateGroupModal(BuildContext context) {
     final groupNameController = TextEditingController();
+    final destinationController = TextEditingController();
     String? selectedVehicleType;
     bool isCreating = false;
 
@@ -62,6 +63,13 @@ class _HomeTabState extends State<HomeTab> {
                     controller: groupNameController,
                   ),
                   const SizedBox(height: AppSpacing.md),
+                  // Input tujuan
+                  CustomTextField(
+                    label: 'Tujuan Pergi',
+                    hint: 'contoh: Kawah Putih, Ciwidey',
+                    controller: destinationController,
+                  ),
+                  const SizedBox(height: AppSpacing.md),
                   Text('TIPE KENDARAAN', style: Theme.of(context).textTheme.labelSmall),
                   const SizedBox(height: AppSpacing.sm),
                   // Dropdown untuk memilih jenis kendaraan yang digunakan grup
@@ -84,7 +92,7 @@ class _HomeTabState extends State<HomeTab> {
                   // Tombol Mulai
                   ElevatedButton(
                     onPressed: isCreating ? null : () async {
-                      if (groupNameController.text.trim().isEmpty || selectedVehicleType == null) return;
+                      if (groupNameController.text.trim().isEmpty || destinationController.text.trim().isEmpty || selectedVehicleType == null) return;
                       setModalState(() => isCreating = true);
                       
                       final authProvider = context.read<AuthProvider>();
@@ -93,6 +101,7 @@ class _HomeTabState extends State<HomeTab> {
                       final success = await groupProvider.createGroup(
                         name: groupNameController.text.trim(),
                         type: selectedVehicleType!,
+                        destination: destinationController.text.trim(),
                         hostUid: authProvider.user!.uid,
                       );
                       
@@ -151,10 +160,10 @@ class _HomeTabState extends State<HomeTab> {
                     style: Theme.of(context).textTheme.displayLarge?.copyWith(fontSize: 24),
                   ),
                   const SizedBox(height: AppSpacing.md),
-                  // Input kode undangan
+                  // Input kode undangan atau link
                   CustomTextField(
-                    label: 'Kode Undangan',
-                    hint: 'contoh: TRG-42A',
+                    label: 'Kode Undangan / Link',
+                    hint: 'contoh: TRG-42A atau https://trackie.app/join/TRG-42A',
                     controller: inviteCodeController,
                   ),
                   const SizedBox(height: AppSpacing.xl),
@@ -167,8 +176,14 @@ class _HomeTabState extends State<HomeTab> {
                       final authProvider = context.read<AuthProvider>();
                       final groupProvider = context.read<GroupProvider>();
                       
+                      // Ekstrak kode dari link jika user mem-paste link (contoh: https://trackie.app/join/TRG-XXX)
+                      String inputCode = inviteCodeController.text.trim();
+                      if (inputCode.contains('/join/')) {
+                        inputCode = inputCode.split('/join/').last.split('?').first.trim();
+                      }
+                      
                       final success = await groupProvider.joinGroup(
-                        inviteCode: inviteCodeController.text.trim(),
+                        inviteCode: inputCode,
                         uid: authProvider.user!.uid,
                       );
                       

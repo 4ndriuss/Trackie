@@ -25,6 +25,7 @@ class GroupService {
   Future<GroupModel> createGroup({
     required String name,
     required String type,
+    required String destination,
     required String hostUid,
   }) async {
     final docRef = _firestore.collection('groups').doc();
@@ -34,6 +35,7 @@ class GroupService {
       id: docRef.id,
       name: name,
       type: type,
+      destination: destination,
       inviteCode: inviteCode,
       hostUid: hostUid,
       memberUids: [hostUid],
