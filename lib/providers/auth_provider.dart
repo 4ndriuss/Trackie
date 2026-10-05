@@ -1,6 +1,7 @@
 // File: auth_provider.dart
 // Provider untuk mengelola state autentikasi pengguna.
 // Menghubungkan UI dengan AuthService dan menyimpan data user yang sedang login.
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../services/auth_service.dart';
@@ -161,15 +162,14 @@ class AuthProvider extends ChangeNotifier {
   }
 
   /// Mengunggah dan memperbarui foto profil pengguna.
-  Future<bool> uploadProfilePicture(dynamic file) async {
+  Future<bool> uploadProfilePicture(Uint8List fileBytes, String ext) async {
     if (_user == null) return false;
     try {
       _isLoading = true;
       _error = null;
       notifyListeners();
 
-      // We expect a dart:io File
-      final url = await _authService.uploadProfilePicture(_user!.uid, file);
+      final url = await _authService.uploadProfilePicture(_user!.uid, fileBytes, ext);
       if (url != null) {
         await _loadUserProfile(_user!.uid);
         _isLoading = false;

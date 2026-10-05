@@ -1,4 +1,4 @@
-import 'dart:io';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
@@ -59,10 +59,11 @@ class _ProfileTabState extends State<ProfileTab> {
     );
 
     if (pickedFile != null && mounted) {
-      final file = File(pickedFile.path);
+      final bytes = await pickedFile.readAsBytes();
+      final ext = pickedFile.name.split('.').last;
       final authProvider = context.read<AuthProvider>();
       
-      final success = await authProvider.uploadProfilePicture(file);
+      final success = await authProvider.uploadProfilePicture(bytes, ext);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

@@ -1,7 +1,8 @@
 // File: auth_service.dart
 // Service untuk menangani autentikasi pengguna menggunakan Firebase Auth
 // dan menyimpan/mengambil data profil dari Firestore.
-import 'dart:io';
+// ...
+import 'dart:typed_data';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -86,13 +87,12 @@ class AuthService {
   }
 
   /// Mengunggah file foto profil ke Firebase Storage dan mengembalikan URL-nya.
-  Future<String?> uploadProfilePicture(String uid, File file) async {
+  Future<String?> uploadProfilePicture(String uid, Uint8List fileBytes, String ext) async {
     try {
       final storageRef = FirebaseStorage.instance.ref();
-      final ext = file.path.split('.').last;
       final profileRef = storageRef.child('profiles/$uid/avatar.$ext');
       
-      final uploadTask = await profileRef.putFile(file);
+      final uploadTask = await profileRef.putData(fileBytes);
       final downloadUrl = await uploadTask.ref.getDownloadURL();
       
       // Update the user's document with the new photoUrl

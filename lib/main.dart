@@ -13,6 +13,8 @@ import 'providers/locale_provider.dart';
 import 'services/background_location_service.dart';
 import 'firebase_options.dart';
 
+import 'package:flutter/foundation.dart';
+
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.light);
 
 void main() async {
@@ -20,7 +22,11 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  await BackgroundLocationService.initialize();
+  
+  if (!kIsWeb) {
+    await BackgroundLocationService.initialize();
+  }
+  
   runApp(const TrackieApp());
 }
 
