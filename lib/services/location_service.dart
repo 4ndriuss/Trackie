@@ -34,7 +34,7 @@ class LocationService {
   }
 
   /// Stream lokasi semua anggota dalam satu grup.
-  /// Mengembalikan Stream<List<MemberLocation>>.
+  /// Mengembalikan `Stream<List<MemberLocation>>`.
   Stream<List<MemberLocation>> streamGroupLocations(String groupId) {
     return _rtdb.ref('active_locations/$groupId').onValue.map((event) {
       final data = event.snapshot.value;

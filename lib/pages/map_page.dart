@@ -107,7 +107,6 @@ class _MapPageState extends State<MapPage> {
   void _showInviteCode() {
     final groupProvider = context.read<GroupProvider>();
     final code = groupProvider.activeGroup?.inviteCode ?? 'TIDAK-ADA-KODE';
-    final link = 'https://trackie.app/join/$code';
 
     showDialog<void>(
       context: context,
@@ -125,14 +124,6 @@ class _MapPageState extends State<MapPage> {
                 fontSize: 32, letterSpacing: 2.0, fontWeight: FontWeight.bold,
               ),
             ),
-            const SizedBox(height: 16),
-            const Text('Atau bagikan link berikut:'),
-            const SizedBox(height: 8),
-            SelectableText(
-              link,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 14, color: Colors.blue),
-            ),
           ],
         ),
         actions: [
@@ -148,18 +139,8 @@ class _MapPageState extends State<MapPage> {
           ),
           TextButton(
             onPressed: () {
-              Clipboard.setData(ClipboardData(text: link));
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Link disalin')),
-              );
-            },
-            child: const Text('SALIN LINK'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              Share.share('Ayo gabung perjalanan saya di Trackie! Gunakan kode: $code atau klik link ini: $link');
+              SharePlus.instance.share(ShareParams(text: 'Ayo gabung perjalanan saya di Trackie! Gunakan kode: $code'));
             },
             child: const Text('BAGIKAN'),
           ),
@@ -366,7 +347,7 @@ class _MapPageState extends State<MapPage> {
                           final m = _members[i];
                           return ListTile(
                             onTap: () => _focusOn(m), // Geser kamera saat anggota ditekan
-                            tileColor: m.isSos ? theme.colorScheme.error.withOpacity(0.1) : null, // ignore: deprecated_member_use
+                            tileColor: m.isSos ? theme.colorScheme.error.withValues(alpha: 0.1) : null, // ignore: deprecated_member_use
                             leading: Stack(
                               children: [
                                 CircleAvatar(

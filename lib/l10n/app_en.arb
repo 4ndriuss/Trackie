@@ -1,0 +1,66 @@
+{
+  "@@locale": "en",
+  "appTitle": "Trackie.",
+  "loginSubtitle": "Login to continue your journey and join your group.",
+  "emailLabel": "Email",
+  "emailHint": "name@example.com",
+  "passwordLabel": "Password",
+  "passwordHint": "Enter your password",
+  "forgotPassword": "Forgot Password?",
+  "loginButton": "LOGIN",
+  "noAccount": "Don't have an account?",
+  "signUp": "Sign Up",
+  "preferencesTitle": "Preferences",
+  "languageSection": "LANGUAGE",
+  "languageChanged": "Language changed to {language}",
+  "@languageChanged": {
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "appearanceSection": "APPEARANCE",
+  "lightMode": "Light Mode",
+  "lightModeDesc": "Light appearance",
+  "darkMode": "Dark Mode",
+  "darkModeDesc": "Dark appearance",
+  "systemMode": "System Default",
+  "systemModeDesc": "Follows device settings",
+
+  "navHome": "Home",
+  "navHistory": "History",
+  "navProfile": "Profile",
+
+  "homeGreeting": "Hello, {name}! 👋",
+  "@homeGreeting": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "homeSubtitle": "Ready for a trip today?",
+  "homeActiveTrip": "Currently on a trip",
+  "homeCreate": "Create Trip",
+  "homeJoin": "Join with Code",
+  "homeUpcoming": "Upcoming Trips",
+  "homeSeeAll": "See All",
+  "homeCreateTripTitle": "Create New Trip",
+  "homeJoinTripTitle": "Join Trip",
+
+  "profileTitle": "Profile",
+  "profileTotalDistance": "Total Distance",
+  "profileTouring": "Touring",
+  "profileRank": "Rank",
+  "profileGhostMode": "Ghost Mode",
+  "profileGhostModeDesc": "Hide your location from group map",
+  "profileSettings": "SETTINGS",
+  "profilePreferences": "Preferences",
+  "profilePreferencesDesc": "Language, appearance",
+  "profileAccount": "Account",
+  "profileAccountDesc": "Profile, password",
+  "profilePrivacy": "Privacy Policy",
+  "profilePrivacyDesc": "Read our privacy policy",
+  "profileLogout": "Log Out"
+}

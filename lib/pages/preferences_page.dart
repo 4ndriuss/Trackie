@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../main.dart';
+import '../providers/locale_provider.dart';
+import '../l10n/app_localizations.dart';
 
 /// [PreferencesPage] menampilkan pengaturan preferensi pengguna,
 /// termasuk pemilihan bahasa dan mode tampilan (Light/Dark).
@@ -18,15 +21,14 @@ class _PreferencesPageState extends State<PreferencesPage> {
     _LanguageOption(code: 'en', name: 'English', flag: '🇺🇸'),
   ];
 
-  String _selectedLanguage = 'id';
-
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final localeProvider = Provider.of<LocaleProvider>(context);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Preferensi'),
+        title: Text(AppLocalizations.of(context)!.preferencesTitle),
         centerTitle: true,
       ),
       body: SingleChildScrollView(
@@ -35,32 +37,32 @@ class _PreferencesPageState extends State<PreferencesPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // === BAHASA ===
-            _buildSectionTitle(theme, 'Bahasa'),
+            _buildSectionTitle(theme, AppLocalizations.of(context)!.languageSection),
             const SizedBox(height: AppSpacing.sm),
             Container(
               decoration: BoxDecoration(
                 color: theme.colorScheme.surface,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: theme.colorScheme.secondary.withOpacity(0.2), // ignore: deprecated_member_use
+                  color: theme.colorScheme.secondary.withValues(alpha: 0.2), // ignore: deprecated_member_use
                 ),
               ),
               child: Column(
                 children: _languages.map((lang) {
-                  final isSelected = _selectedLanguage == lang.code;
+                  final isSelected = localeProvider.locale.languageCode == lang.code;
                   return RadioListTile<String>(
                     value: lang.code,
-                    groupValue: _selectedLanguage,
+                    groupValue: localeProvider.locale.languageCode,
                     onChanged: (value) {
-                      setState(() {
-                        _selectedLanguage = value!;
-                      });
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Bahasa diubah ke ${lang.name}'),
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
+                      if (value != null) {
+                        localeProvider.setLocale(Locale(value));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(AppLocalizations.of(context)!.languageChanged(lang.name)),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                      }
                     },
                     title: Text(
                       '${lang.flag}  ${lang.name}',
@@ -80,14 +82,14 @@ class _PreferencesPageState extends State<PreferencesPage> {
             const SizedBox(height: AppSpacing.xl),
 
             // === TAMPILAN ===
-            _buildSectionTitle(theme, 'Tampilan'),
+            _buildSectionTitle(theme, AppLocalizations.of(context)!.appearanceSection),
             const SizedBox(height: AppSpacing.sm),
             Container(
               decoration: BoxDecoration(
                 color: theme.colorScheme.surface,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: theme.colorScheme.secondary.withOpacity(0.2), // ignore: deprecated_member_use
+                  color: theme.colorScheme.secondary.withValues(alpha: 0.2), // ignore: deprecated_member_use
                 ),
               ),
               child: ValueListenableBuilder<ThemeMode>(
@@ -102,14 +104,14 @@ class _PreferencesPageState extends State<PreferencesPage> {
                         onChanged: (value) {
                           themeNotifier.value = value!;
                         },
-                        title: const Row(
+                        title: Row(
                           children: [
-                            Icon(Icons.light_mode, size: 20),
-                            SizedBox(width: AppSpacing.sm),
-                            Text('Light Mode'),
+                            const Icon(Icons.light_mode, size: 20),
+                            const SizedBox(width: AppSpacing.sm),
+                            Text(AppLocalizations.of(context)!.lightMode),
                           ],
                         ),
-                        subtitle: const Text('Tampilan terang'),
+                        subtitle: Text(AppLocalizations.of(context)!.lightModeDesc),
                         activeColor: theme.primaryColor,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -119,7 +121,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
                         height: 1,
                         indent: AppSpacing.md,
                         endIndent: AppSpacing.md,
-                        color: theme.colorScheme.secondary.withOpacity(0.15), // ignore: deprecated_member_use
+                        color: theme.colorScheme.secondary.withValues(alpha: 0.15), // ignore: deprecated_member_use
                       ),
                       // Dark Mode
                       RadioListTile<ThemeMode>(
@@ -128,14 +130,14 @@ class _PreferencesPageState extends State<PreferencesPage> {
                         onChanged: (value) {
                           themeNotifier.value = value!;
                         },
-                        title: const Row(
+                        title: Row(
                           children: [
-                            Icon(Icons.dark_mode, size: 20),
-                            SizedBox(width: AppSpacing.sm),
-                            Text('Dark Mode'),
+                            const Icon(Icons.dark_mode, size: 20),
+                            const SizedBox(width: AppSpacing.sm),
+                            Text(AppLocalizations.of(context)!.darkMode),
                           ],
                         ),
-                        subtitle: const Text('Tampilan gelap'),
+                        subtitle: Text(AppLocalizations.of(context)!.darkModeDesc),
                         activeColor: theme.primaryColor,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -145,7 +147,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
                         height: 1,
                         indent: AppSpacing.md,
                         endIndent: AppSpacing.md,
-                        color: theme.colorScheme.secondary.withOpacity(0.15), // ignore: deprecated_member_use
+                        color: theme.colorScheme.secondary.withValues(alpha: 0.15), // ignore: deprecated_member_use
                       ),
                       // System Default
                       RadioListTile<ThemeMode>(
@@ -154,14 +156,14 @@ class _PreferencesPageState extends State<PreferencesPage> {
                         onChanged: (value) {
                           themeNotifier.value = value!;
                         },
-                        title: const Row(
+                        title: Row(
                           children: [
-                            Icon(Icons.settings_brightness, size: 20),
-                            SizedBox(width: AppSpacing.sm),
-                            Text('Ikuti Sistem'),
+                            const Icon(Icons.settings_brightness, size: 20),
+                            const SizedBox(width: AppSpacing.sm),
+                            Text(AppLocalizations.of(context)!.systemMode),
                           ],
                         ),
-                        subtitle: const Text('Mengikuti pengaturan perangkat'),
+                        subtitle: Text(AppLocalizations.of(context)!.systemModeDesc),
                         activeColor: theme.primaryColor,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),

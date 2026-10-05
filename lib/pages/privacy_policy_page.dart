@@ -24,7 +24,7 @@ class PrivacyPolicyPage extends StatelessWidget {
               child: Container(
                 padding: const EdgeInsets.all(AppSpacing.md),
                 decoration: BoxDecoration(
-                  color: theme.primaryColor.withOpacity(0.1), // ignore: deprecated_member_use
+                  color: theme.primaryColor.withValues(alpha: 0.1), // ignore: deprecated_member_use
                   shape: BoxShape.circle,
                 ),
                 child: Icon(

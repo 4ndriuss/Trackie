@@ -1,8 +1,9 @@
 flutter_native_splash:
-  color: "#F7F5F2" # Warna neutral (krem terang) dari tema kita
-  image: assets/logo.png
+  color: "#FFFFFF" # Background putih sesuai instruksi
+  image: "assets/images/logo.png"
   android: true
   ios: true
+  web: false
   android_12:
-    image: assets/logo.png
-    icon_background_color: "#F7F5F2"
+    image: "assets/images/logo.png"
+    icon_background_color: "#FFFFFF"

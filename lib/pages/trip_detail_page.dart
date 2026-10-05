@@ -30,8 +30,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
   String _buildShareText() {
     final trip = widget.trip;
     final dateStr = '${trip.date.day}/${trip.date.month}/${trip.date.year}';
-    
-    return '🏍️ *${trip.title}*\n'
+    return '🏍️ *${trip.groupName} - ${trip.destination}*\n'
         '📅 $dateStr\n'
         '📏 Jarak: ${trip.distanceKm} km\n'
         '⏱️ Durasi: ${trip.duration}\n'
@@ -130,7 +129,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
                     width: 40,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.secondary.withOpacity(0.3), // ignore: deprecated_member_use
+                      color: theme.colorScheme.secondary.withValues(alpha: 0.3), // ignore: deprecated_member_use
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -156,10 +155,10 @@ class _TripDetailPageState extends State<TripDetailPage> {
                 Container(
                   padding: const EdgeInsets.all(AppSpacing.md),
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.secondary.withOpacity(0.05), // ignore: deprecated_member_use
+                    color: theme.colorScheme.secondary.withValues(alpha: 0.05), // ignore: deprecated_member_use
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: theme.colorScheme.secondary.withOpacity(0.15), // ignore: deprecated_member_use
+                      color: theme.colorScheme.secondary.withValues(alpha: 0.15), // ignore: deprecated_member_use
                     ),
                   ),
                   child: Row(
@@ -167,7 +166,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: theme.primaryColor.withOpacity(0.1), // ignore: deprecated_member_use
+                          color: theme.primaryColor.withValues(alpha: 0.1), // ignore: deprecated_member_use
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Icon(Icons.route, color: theme.primaryColor, size: 24),
@@ -178,8 +177,12 @@ class _TripDetailPageState extends State<TripDetailPage> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              widget.trip.title,
+                              widget.trip.destination,
                               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                            ),
+                            Text(
+                              widget.trip.groupName,
+                              style: const TextStyle(fontSize: 12, color: Colors.grey),
                             ),
                             const SizedBox(height: 2),
                             Text(
@@ -301,7 +304,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1), // ignore: deprecated_member_use
+              color: color.withValues(alpha: 0.1), // ignore: deprecated_member_use
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: color, size: 24),
@@ -418,7 +421,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
                     boxShadow: [
                       BoxShadow(
                         // ignore: deprecated_member_use
-                        color: Colors.black.withOpacity(0.05),
+                        color: Colors.black.withValues(alpha: 0.05),
                         offset: const Offset(0, -4),
                         blurRadius: 10,
                       ),
@@ -429,8 +432,15 @@ class _TripDetailPageState extends State<TripDetailPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          widget.trip.title,
+                          widget.trip.destination,
                           style: theme.textTheme.displayLarge?.copyWith(fontSize: 24),
+                        ),
+                        Text(
+                          widget.trip.groupName,
+                          style: theme.textTheme.bodyMedium?.copyWith(
+                            color: theme.colorScheme.secondary,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                         const SizedBox(height: AppSpacing.sm),
                         Text(
@@ -469,10 +479,10 @@ class _TripDetailPageState extends State<TripDetailPage> {
                           width: double.infinity,
                           padding: const EdgeInsets.all(AppSpacing.md),
                           decoration: BoxDecoration(
-                            color: theme.colorScheme.secondary.withOpacity(0.05), // ignore: deprecated_member_use
+                            color: theme.colorScheme.secondary.withValues(alpha: 0.05), // ignore: deprecated_member_use
                             borderRadius: BorderRadius.circular(12),
                             border: Border.all(
-                              color: theme.colorScheme.secondary.withOpacity(0.2), // ignore: deprecated_member_use
+                              color: theme.colorScheme.secondary.withValues(alpha: 0.2), // ignore: deprecated_member_use
                             ),
                           ),
                           child: Column(

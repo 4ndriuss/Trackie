@@ -37,7 +37,7 @@ class _AccountPageState extends State<AccountPage> {
                 color: theme.colorScheme.surface,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: theme.colorScheme.secondary.withOpacity(0.2), // ignore: deprecated_member_use
+                  color: theme.colorScheme.secondary.withValues(alpha: 0.2), // ignore: deprecated_member_use
                 ),
               ),
               child: Column(
@@ -78,7 +78,7 @@ class _AccountPageState extends State<AccountPage> {
                 color: theme.colorScheme.surface,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: theme.colorScheme.secondary.withOpacity(0.2), // ignore: deprecated_member_use
+                  color: theme.colorScheme.secondary.withValues(alpha: 0.2), // ignore: deprecated_member_use
                 ),
               ),
               child: Column(
@@ -88,7 +88,7 @@ class _AccountPageState extends State<AccountPage> {
                     leading: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: theme.primaryColor.withOpacity(0.1), // ignore: deprecated_member_use
+                        color: theme.primaryColor.withValues(alpha: 0.1), // ignore: deprecated_member_use
                         shape: BoxShape.circle,
                       ),
                       child: Icon(Icons.edit_outlined, color: theme.primaryColor, size: 20),
@@ -107,7 +107,7 @@ class _AccountPageState extends State<AccountPage> {
                     leading: Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: theme.primaryColor.withOpacity(0.1), // ignore: deprecated_member_use
+                        color: theme.primaryColor.withValues(alpha: 0.1), // ignore: deprecated_member_use
                         shape: BoxShape.circle,
                       ),
                       child: Icon(Icons.lock_outline, color: theme.primaryColor, size: 20),
@@ -134,14 +134,14 @@ class _AccountPageState extends State<AccountPage> {
                 color: theme.colorScheme.surface,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: theme.colorScheme.error.withOpacity(0.3), // ignore: deprecated_member_use
+                  color: theme.colorScheme.error.withValues(alpha: 0.3), // ignore: deprecated_member_use
                 ),
               ),
               child: ListTile(
                 leading: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.error.withOpacity(0.1), // ignore: deprecated_member_use
+                    color: theme.colorScheme.error.withValues(alpha: 0.1), // ignore: deprecated_member_use
                     shape: BoxShape.circle,
                   ),
                   child: Icon(Icons.delete_forever_outlined, color: theme.colorScheme.error, size: 20),
@@ -186,7 +186,7 @@ class _AccountPageState extends State<AccountPage> {
       leading: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: theme.colorScheme.secondary.withOpacity(0.1), // ignore: deprecated_member_use
+          color: theme.colorScheme.secondary.withValues(alpha: 0.1), // ignore: deprecated_member_use
           shape: BoxShape.circle,
         ),
         child: Icon(icon, color: theme.colorScheme.secondary, size: 20),
@@ -204,7 +204,7 @@ class _AccountPageState extends State<AccountPage> {
       height: 1,
       indent: AppSpacing.md,
       endIndent: AppSpacing.md,
-      color: theme.colorScheme.secondary.withOpacity(0.15), // ignore: deprecated_member_use
+      color: theme.colorScheme.secondary.withValues(alpha: 0.15), // ignore: deprecated_member_use
     );
   }
 

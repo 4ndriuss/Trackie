@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../l10n/app_localizations.dart';
+
 import '../theme/app_theme.dart';
 import '../providers/auth_provider.dart';
 import 'signup_page.dart';
@@ -93,7 +95,7 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
           SafeArea(
@@ -104,27 +106,36 @@ class _LoginPageState extends State<LoginPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const SizedBox(height: 64),
+                    const SizedBox(height: 32),
+                    Center(
+                      child: Image.asset(
+                        'assets/images/logo.png',
+                        height: 100,
+                        fit: BoxFit.contain,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
                     Text(
-                      'Trackie.',
+                      'Trackie',
                       style: Theme.of(context).textTheme.displayLarge,
+                      textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: AppSpacing.md),
                     Text(
-                      'Login to continue your journey and join your group.',
+                      AppLocalizations.of(context)!.loginSubtitle,
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Theme.of(context).colorScheme.secondary,
                       ),
                     ),
                     const SizedBox(height: 64),
                     CustomTextField(
-                      label: 'Email',
-                      hint: 'name@example.com',
+                      label: AppLocalizations.of(context)!.emailLabel,
+                      hint: AppLocalizations.of(context)!.emailHint,
                       keyboardType: TextInputType.emailAddress,
                       controller: _emailController,
                       validator: (value) {
                         if (value == null || value.isEmpty) {
-                          return 'Email tidak boleh kosong';
+                          return 'Email tidak boleh kosong'; // TODO: localize errors too
                         }
                         if (!value.contains('@')) {
                           return 'Format email tidak valid';
@@ -134,8 +145,8 @@ class _LoginPageState extends State<LoginPage> {
                     ),
                     const SizedBox(height: AppSpacing.md),
                     CustomTextField(
-                      label: 'Password',
-                      hint: 'Enter your password',
+                      label: AppLocalizations.of(context)!.passwordLabel,
+                      hint: AppLocalizations.of(context)!.passwordHint,
                       isPassword: true,
                       controller: _passwordController,
                       validator: (value) {
@@ -150,13 +161,13 @@ class _LoginPageState extends State<LoginPage> {
                       alignment: Alignment.centerRight,
                       child: TextButton(
                         onPressed: _showForgotPasswordDialog,
-                        child: const Text('Forgot Password?'),
+                        child: Text(AppLocalizations.of(context)!.forgotPassword),
                       ),
                     ),
                     const SizedBox(height: AppSpacing.lg),
                     ElevatedButton(
                       onPressed: _isLoading ? null : _handleLogin,
-                      child: const Text('LOGIN'),
+                      child: Text(AppLocalizations.of(context)!.loginButton),
                     ),
                     const SizedBox(height: AppSpacing.xl),
                     Wrap(
@@ -164,7 +175,7 @@ class _LoginPageState extends State<LoginPage> {
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
                         Text(
-                          'Don\'t have an account?',
+                          AppLocalizations.of(context)!.noAccount,
                           style: Theme.of(context).textTheme.bodyMedium,
                         ),
                         TextButton(
@@ -174,7 +185,7 @@ class _LoginPageState extends State<LoginPage> {
                               MaterialPageRoute(builder: (_) => const SignupPage()),
                             );
                           },
-                          child: const Text('Sign Up'),
+                          child: Text(AppLocalizations.of(context)!.signUp),
                         ),
                       ],
                     ),
@@ -185,7 +196,7 @@ class _LoginPageState extends State<LoginPage> {
           ),
           if (_isLoading)
             Container(
-              color: Colors.black.withOpacity(0.3),
+              color: Colors.black.withValues(alpha: 0.3),
               child: const Center(
                 child: CircularProgressIndicator(),
               ),

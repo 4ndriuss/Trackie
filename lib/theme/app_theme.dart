@@ -5,11 +5,13 @@ import 'package:google_fonts/google_fonts.dart';
 
 /// Kelas [AppTheme] menyediakan pengaturan tema untuk aplikasi.
 class AppTheme {
-  // Warna utama yang digunakan di aplikasi, merujuk pada DESIGN.md
-  static const Color primary = Color(0xFF1A1C1E);
-  static const Color secondary = Color(0xFF6C7278);
-  static const Color tertiary = Color(0xFFB8422E);
-  static const Color neutral = Color(0xFFF7F5F2);
+  // Warna utama yang digunakan di aplikasi, merujuk pada desain logo
+  static const Color primary = Color(0xFFFF6A00); // Oranye
+  static const Color secondary = Color(0xFF4A0FBF); // Ungu Tua
+  static const Color secondaryDark = Color(0xFFB58CFF); // Ungu Muda
+  static const Color textDark = Color(0xFF1A1C1E);
+  static const Color textGrey = Color(0xFF6C7278);
+  static const Color neutral = Color(0xFFFFFFFF);
 
   /// Menghasilkan tema terang (light theme) untuk aplikasi.
   static ThemeData get lightTheme {
@@ -20,30 +22,30 @@ class AppTheme {
         primary: primary,
         secondary: secondary,
         surface: neutral,
-        error: tertiary,
+        error: Colors.redAccent,
       ),
       // Pengaturan tipografi menggunakan font dari Google Fonts
       textTheme: TextTheme(
         displayLarge: GoogleFonts.publicSans(
           fontSize: 48, // Setara dengan 3rem
           fontWeight: FontWeight.bold,
-          color: primary,
+          color: textDark,
           height: 1.1,
         ),
         titleMedium: GoogleFonts.publicSans(
           fontSize: 18,
           fontWeight: FontWeight.w600,
-          color: primary,
+          color: textDark,
         ),
         bodyMedium: GoogleFonts.publicSans(
           fontSize: 16, // Setara dengan 1rem
-          color: primary,
+          color: textDark,
         ),
         labelSmall: GoogleFonts.spaceGrotesk(
           fontSize: 12, // Setara dengan 0.75rem
           fontWeight: FontWeight.w600,
           letterSpacing: 1.0,
-          color: primary,
+          color: textDark,
         ),
       ),
       // Pengaturan gaya AppBar
@@ -54,7 +56,7 @@ class AppTheme {
         titleTextStyle: GoogleFonts.publicSans(
           fontSize: 20,
           fontWeight: FontWeight.bold,
-          color: primary,
+          color: textDark,
         ),
       ),
       // Pengaturan gaya untuk input form (TextField)
@@ -64,24 +66,24 @@ class AppTheme {
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8), // Menggunakan rounded md
-          borderSide: const BorderSide(color: secondary),
+          borderSide: const BorderSide(color: textGrey),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: secondary, width: 0.5),
+          borderSide: const BorderSide(color: textGrey, width: 0.5),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(color: primary, width: 2),
         ),
-        labelStyle: GoogleFonts.publicSans(color: secondary),
+        labelStyle: GoogleFonts.publicSans(color: textGrey),
         // ignore: deprecated_member_use
-        hintStyle: GoogleFonts.publicSans(color: secondary.withOpacity(0.5)),
+        hintStyle: GoogleFonts.publicSans(color: textGrey.withValues(alpha: 0.5)),
       ),
       // Pengaturan gaya untuk ElevatedButton
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: tertiary,
+          backgroundColor: primary,
           foregroundColor: Colors.white,
           elevation: 0,
           shape: RoundedRectangleBorder(
@@ -98,7 +100,7 @@ class AppTheme {
       // Pengaturan gaya untuk TextButton
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: tertiary,
+          foregroundColor: primary,
           textStyle: GoogleFonts.publicSans(
             fontWeight: FontWeight.w600,
           ),
@@ -109,7 +111,7 @@ class AppTheme {
 
   /// Menghasilkan tema gelap (dark theme) untuk aplikasi.
   static ThemeData get darkTheme {
-    const Color darkBg = primary;
+    const Color darkBg = textDark;
     const Color darkSurface = Color(0xFF2D3035);
     const Color darkText = neutral;
 
@@ -118,9 +120,9 @@ class AppTheme {
       primaryColor: darkText,
       colorScheme: const ColorScheme.dark(
         primary: darkText,
-        secondary: secondary,
+        secondary: secondaryDark,
         surface: darkSurface,
-        error: tertiary,
+        error: Colors.redAccent,
       ),
       textTheme: TextTheme(
         displayLarge: GoogleFonts.publicSans(
@@ -161,23 +163,23 @@ class AppTheme {
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: secondary),
+          borderSide: const BorderSide(color: textGrey),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: secondary, width: 0.5),
+          borderSide: const BorderSide(color: textGrey, width: 0.5),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(color: darkText, width: 2),
         ),
-        labelStyle: GoogleFonts.publicSans(color: secondary),
+        labelStyle: GoogleFonts.publicSans(color: darkText.withValues(alpha: 0.7)), // ignore: deprecated_member_use
         // ignore: deprecated_member_use
-        hintStyle: GoogleFonts.publicSans(color: secondary.withOpacity(0.5)),
+        hintStyle: GoogleFonts.publicSans(color: darkText.withValues(alpha: 0.5)),
       ),
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
-          backgroundColor: tertiary,
+          backgroundColor: primary,
           foregroundColor: Colors.white,
           elevation: 0,
           shape: RoundedRectangleBorder(
@@ -193,7 +195,7 @@ class AppTheme {
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
-          foregroundColor: tertiary,
+          foregroundColor: primary,
           textStyle: GoogleFonts.publicSans(
             fontWeight: FontWeight.w600,
           ),
@@ -205,7 +207,7 @@ class AppTheme {
           side: const BorderSide(color: darkText),
         ),
       ),
-      dividerColor: secondary.withOpacity(0.3), // ignore: deprecated_member_use
+      dividerColor: textGrey.withValues(alpha: 0.3), // ignore: deprecated_member_use
     );
   }
 }

@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../theme/app_theme.dart';
 import '../providers/auth_provider.dart';
+import '../l10n/app_localizations.dart';
 import 'privacy_policy_page.dart';
 import 'preferences_page.dart';
 import 'account_page.dart';
@@ -164,97 +165,167 @@ class _ProfileTabState extends State<ProfileTab> {
           Padding(
             padding: const EdgeInsets.all(AppSpacing.lg),
             child: Text(
-              'Profil',
+              AppLocalizations.of(context)!.profileTitle,
               style: theme.textTheme.displayLarge?.copyWith(fontSize: 32),
             ),
           ),
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(AppSpacing.lg),
+              padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, 80),
               child: Column(
                 children: [
                   const SizedBox(height: AppSpacing.md),
-                  // Foto Profil
-                  GestureDetector(
-                    onTap: () => _showImagePicker(context),
-                    child: Stack(
-                      children: [
-                        CircleAvatar(
-                          radius: 60,
-                          backgroundColor: theme.primaryColor.withOpacity(0.1), // ignore: deprecated_member_use
-                          backgroundImage: userProfile?.photoUrl != null
-                              ? CachedNetworkImageProvider(userProfile!.photoUrl!)
-                              : null,
-                          child: userProfile?.photoUrl == null
-                              ? Icon(
-                                  Icons.person,
-                                  size: 60,
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      // Foto Profil
+                      GestureDetector(
+                        onTap: () => _showImagePicker(context),
+                        child: Stack(
+                          children: [
+                            CircleAvatar(
+                              radius: 40,
+                              backgroundColor: theme.primaryColor.withValues(alpha: 0.1),
+                              backgroundImage: userProfile?.photoUrl != null
+                                  ? CachedNetworkImageProvider(userProfile!.photoUrl!)
+                                  : null,
+                              child: userProfile?.photoUrl == null
+                                  ? Icon(
+                                      Icons.person,
+                                      size: 40,
+                                      color: theme.primaryColor,
+                                    )
+                                  : null,
+                            ),
+                            if (authProvider.isLoading)
+                              const Positioned.fill(
+                                child: CircularProgressIndicator(),
+                              ),
+                            Positioned(
+                              bottom: 0,
+                              right: 0,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
                                   color: theme.primaryColor,
-                                )
-                              : null,
-                        ),
-                        if (authProvider.isLoading)
-                          const Positioned.fill(
-                            child: CircularProgressIndicator(),
-                          ),
-                        Positioned(
-                          bottom: 0,
-                          right: 0,
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              color: theme.primaryColor,
-                              shape: BoxShape.circle,
-                              border: Border.all(color: theme.scaffoldBackgroundColor, width: 2),
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: theme.scaffoldBackgroundColor, width: 2),
+                                ),
+                                child: const Icon(
+                                  Icons.camera_alt,
+                                  size: 14,
+                                  color: Colors.white,
+                                ),
+                              ),
                             ),
-                            child: const Icon(
-                              Icons.camera_alt,
-                              size: 20,
-                              color: Colors.white,
-                            ),
-                          ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  // Nama Pengguna
-                  Text(
-                    userProfile?.name ?? 'User',
-                    style: theme.textTheme.titleMedium?.copyWith(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  // Info Kendaraan
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.md,
-                      vertical: AppSpacing.sm,
-                    ),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.secondary.withOpacity(0.1), // ignore: deprecated_member_use
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          Icons.two_wheeler,
-                          size: 18,
+                      ),
+                      const SizedBox(width: AppSpacing.md),
+                      // Info Teks (Nama, Email, Info Kendaraan)
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              userProfile?.name ?? 'User',
+                              style: theme.textTheme.titleMedium?.copyWith(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            if (userProfile?.email != null) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                userProfile!.email,
+                                style: theme.textTheme.bodySmall?.copyWith(
+                                  color: AppTheme.textGrey,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                            const SizedBox(height: 8),
+                            // Kendaraan
+                            if (userProfile?.vehicle != null && userProfile!.vehicle.isNotEmpty)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.secondary.withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(
+                                      Icons.two_wheeler,
+                                      size: 14,
+                                      color: theme.colorScheme.secondary,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Flexible(
+                                      child: Text(
+                                        userProfile.vehicle,
+                                        style: theme.textTheme.bodySmall?.copyWith(
+                                          color: theme.colorScheme.secondary,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            else
+                              GestureDetector(
+                                onTap: () {
+                                  Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountPage()));
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: theme.primaryColor.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(12),
+                                    border: Border.all(color: theme.primaryColor.withValues(alpha: 0.3)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.add,
+                                        size: 14,
+                                        color: theme.primaryColor,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Tambah kendaraan',
+                                        style: theme.textTheme.bodySmall?.copyWith(
+                                          color: theme.primaryColor,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      // Tombol Edit Profile
+                      IconButton(
+                        onPressed: () {
+                          Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountPage()));
+                        },
+                        icon: Icon(
+                          Icons.edit_outlined,
                           color: theme.colorScheme.secondary,
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          (userProfile?.vehicle != null && userProfile!.vehicle.isNotEmpty) ? userProfile.vehicle : '-',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.secondary,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
+                        tooltip: 'Edit Profil',
+                      ),
+                    ],
                   ),
                   const SizedBox(height: AppSpacing.xl),
                   
@@ -265,11 +336,11 @@ class _ProfileTabState extends State<ProfileTab> {
                       color: theme.colorScheme.surface,
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: theme.colorScheme.secondary.withOpacity(0.2), // ignore: deprecated_member_use
+                        color: theme.colorScheme.secondary.withValues(alpha: 0.2), // ignore: deprecated_member_use
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.03), // ignore: deprecated_member_use
+                          color: Colors.black.withValues(alpha: 0.03), // ignore: deprecated_member_use
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -278,19 +349,19 @@ class _ProfileTabState extends State<ProfileTab> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                       children: [
-                        Expanded(child: _buildStatItem(context, 'Total Jarak', '2.450', 'km')),
+                        Expanded(child: _buildStatItem(context, AppLocalizations.of(context)!.profileTotalDistance, '2.450', 'km')),
                         Container(
                           width: 1,
                           height: 40,
-                          color: theme.colorScheme.secondary.withOpacity(0.2), // ignore: deprecated_member_use
+                          color: theme.colorScheme.secondary.withValues(alpha: 0.2), // ignore: deprecated_member_use
                         ),
-                        Expanded(child: _buildStatItem(context, 'Touring', '12', 'kali')),
+                        Expanded(child: _buildStatItem(context, AppLocalizations.of(context)!.profileTouring, '12', 'kali')),
                         Container(
                           width: 1,
                           height: 40,
-                          color: theme.colorScheme.secondary.withOpacity(0.2), // ignore: deprecated_member_use
+                          color: theme.colorScheme.secondary.withValues(alpha: 0.2), // ignore: deprecated_member_use
                         ),
-                        Expanded(child: _buildStatItem(context, 'Rank', 'Veteran', '⭐️')),
+                        Expanded(child: _buildStatItem(context, AppLocalizations.of(context)!.profileRank, 'Veteran', '⭐️')),
                       ],
                     ),
                   ),
@@ -303,7 +374,7 @@ class _ProfileTabState extends State<ProfileTab> {
                       color: theme.colorScheme.surface,
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: theme.colorScheme.secondary.withOpacity(0.2), // ignore: deprecated_member_use
+                        color: theme.colorScheme.secondary.withValues(alpha: 0.2), // ignore: deprecated_member_use
                       ),
                     ),
                     child: SwitchListTile(
@@ -322,14 +393,14 @@ class _ProfileTabState extends State<ProfileTab> {
                           ),
                         );
                       },
-                      title: const Text('Mode Hantu (Ghost Mode)', style: TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: const Text('Sembunyikan lokasi Anda sementara dari peta grup.'),
+                      title: Text(AppLocalizations.of(context)!.profileGhostMode, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      subtitle: Text(AppLocalizations.of(context)!.profileGhostModeDesc),
                       secondary: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
                           color: _isGhostMode 
-                              ? theme.colorScheme.error.withOpacity(0.1) // ignore: deprecated_member_use
-                              : theme.colorScheme.secondary.withOpacity(0.1), // ignore: deprecated_member_use
+                              ? theme.colorScheme.error.withValues(alpha: 0.1) // ignore: deprecated_member_use
+                              : theme.colorScheme.secondary.withValues(alpha: 0.1), // ignore: deprecated_member_use
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -337,7 +408,7 @@ class _ProfileTabState extends State<ProfileTab> {
                           color: _isGhostMode ? theme.colorScheme.error : theme.colorScheme.secondary,
                         ),
                       ),
-                      activeTrackColor: theme.colorScheme.error.withOpacity(0.5), // ignore: deprecated_member_use
+                      activeTrackColor: theme.colorScheme.error.withValues(alpha: 0.5), // ignore: deprecated_member_use
                       activeThumbColor: theme.colorScheme.error,
                     ),
                   ),
@@ -350,7 +421,7 @@ class _ProfileTabState extends State<ProfileTab> {
                     child: Padding(
                       padding: const EdgeInsets.only(left: 4),
                       child: Text(
-                        'PENGATURAN',
+                        AppLocalizations.of(context)!.profileSettings,
                         style: theme.textTheme.labelSmall?.copyWith(
                           color: theme.colorScheme.secondary,
                           letterSpacing: 1.5,
@@ -364,7 +435,7 @@ class _ProfileTabState extends State<ProfileTab> {
                       color: theme.colorScheme.surface,
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
-                        color: theme.colorScheme.secondary.withOpacity(0.2), // ignore: deprecated_member_use
+                        color: theme.colorScheme.secondary.withValues(alpha: 0.2), // ignore: deprecated_member_use
                       ),
                     ),
                     child: Column(
@@ -374,8 +445,8 @@ class _ProfileTabState extends State<ProfileTab> {
                           theme,
                           icon: Icons.tune,
                           iconColor: Colors.blue,
-                          title: 'Preferensi',
-                          subtitle: 'Bahasa, tampilan',
+                          title: AppLocalizations.of(context)!.profilePreferences,
+                          subtitle: AppLocalizations.of(context)!.profilePreferencesDesc,
                           onTap: () {
                             Navigator.push(
                               context,
@@ -389,8 +460,8 @@ class _ProfileTabState extends State<ProfileTab> {
                           theme,
                           icon: Icons.manage_accounts_outlined,
                           iconColor: Colors.teal,
-                          title: 'Akun',
-                          subtitle: 'Profil, password, hapus akun',
+                          title: AppLocalizations.of(context)!.profileAccount,
+                          subtitle: AppLocalizations.of(context)!.profileAccountDesc,
                           onTap: () {
                             Navigator.push(
                               context,
@@ -404,8 +475,8 @@ class _ProfileTabState extends State<ProfileTab> {
                           theme,
                           icon: Icons.privacy_tip_outlined,
                           iconColor: Colors.orange,
-                          title: 'Kebijakan Privasi',
-                          subtitle: 'Baca kebijakan privasi kami',
+                          title: AppLocalizations.of(context)!.profilePrivacy,
+                          subtitle: AppLocalizations.of(context)!.profilePrivacyDesc,
                           onTap: () {
                             Navigator.push(
                               context,
@@ -421,12 +492,13 @@ class _ProfileTabState extends State<ProfileTab> {
                   // Tombol Log Out
                   SizedBox(
                     width: double.infinity,
-                    child: ElevatedButton.icon(
+                    child: OutlinedButton.icon(
                       onPressed: () => _handleLogout(context),
                       icon: const Icon(Icons.logout),
-                      label: const Text('Log Out'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: theme.colorScheme.error,
+                      label: Text(AppLocalizations.of(context)!.profileLogout),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: theme.colorScheme.error,
+                        side: BorderSide(color: theme.colorScheme.error),
                         padding: const EdgeInsets.symmetric(vertical: 16),
                       ),
                     ),
@@ -436,7 +508,7 @@ class _ProfileTabState extends State<ProfileTab> {
                   Text(
                     'Trackie v1.0.0',
                     style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.secondary.withOpacity(0.5), // ignore: deprecated_member_use
+                      color: theme.colorScheme.secondary.withValues(alpha: 0.5), // ignore: deprecated_member_use
                     ),
                   ),
                   const SizedBox(height: AppSpacing.md),
@@ -461,7 +533,7 @@ class _ProfileTabState extends State<ProfileTab> {
       leading: Container(
         padding: const EdgeInsets.all(8),
         decoration: BoxDecoration(
-          color: iconColor.withOpacity(0.1), // ignore: deprecated_member_use
+          color: iconColor.withValues(alpha: 0.1), // ignore: deprecated_member_use
           shape: BoxShape.circle,
         ),
         child: Icon(icon, color: iconColor, size: 20),
@@ -481,7 +553,7 @@ class _ProfileTabState extends State<ProfileTab> {
       height: 1,
       indent: AppSpacing.md,
       endIndent: AppSpacing.md,
-      color: theme.colorScheme.secondary.withOpacity(0.15), // ignore: deprecated_member_use
+      color: theme.colorScheme.secondary.withValues(alpha: 0.15), // ignore: deprecated_member_use
     );
   }
 }

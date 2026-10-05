@@ -1,0 +1,66 @@
+{
+  "@@locale": "id",
+  "appTitle": "Trackie.",
+  "loginSubtitle": "Login untuk melanjutkan perjalanan dan bergabung dengan grupmu.",
+  "emailLabel": "Email",
+  "emailHint": "nama@contoh.com",
+  "passwordLabel": "Kata Sandi",
+  "passwordHint": "Masukkan kata sandimu",
+  "forgotPassword": "Lupa Kata Sandi?",
+  "loginButton": "MASUK",
+  "noAccount": "Belum punya akun?",
+  "signUp": "Daftar",
+  "preferencesTitle": "Preferensi",
+  "languageSection": "BAHASA",
+  "languageChanged": "Bahasa diubah ke {language}",
+  "@languageChanged": {
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "appearanceSection": "TAMPILAN",
+  "lightMode": "Light Mode",
+  "lightModeDesc": "Tampilan terang",
+  "darkMode": "Dark Mode",
+  "darkModeDesc": "Tampilan gelap",
+  "systemMode": "Ikuti Sistem",
+  "systemModeDesc": "Mengikuti pengaturan perangkat",
+
+  "navHome": "Home",
+  "navHistory": "Riwayat",
+  "navProfile": "Profil",
+
+  "homeGreeting": "Halo, {name}! 👋",
+  "@homeGreeting": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "homeSubtitle": "Siap untuk perjalanan hari ini?",
+  "homeActiveTrip": "Sedang dalam perjalanan",
+  "homeCreate": "Buat Trip",
+  "homeJoin": "Gabung dengan Kode",
+  "homeUpcoming": "Jadwal Mendatang",
+  "homeSeeAll": "Lihat Semua",
+  "homeCreateTripTitle": "Buat Perjalanan Baru",
+  "homeJoinTripTitle": "Gabung Perjalanan",
+
+  "profileTitle": "Profil",
+  "profileTotalDistance": "Total Jarak",
+  "profileTouring": "Touring",
+  "profileRank": "Rank",
+  "profileGhostMode": "Mode Hantu (Ghost Mode)",
+  "profileGhostModeDesc": "Sembunyikan lokasimu dari peta grup",
+  "profileSettings": "PENGATURAN",
+  "profilePreferences": "Preferensi",
+  "profilePreferencesDesc": "Bahasa, tampilan",
+  "profileAccount": "Akun",
+  "profileAccountDesc": "Profil, password",
+  "profilePrivacy": "Kebijakan Privasi",
+  "profilePrivacyDesc": "Baca kebijakan privasi kami",
+  "profileLogout": "Log Out"
+}

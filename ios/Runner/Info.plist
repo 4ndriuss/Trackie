@@ -26,7 +26,6 @@
 		<string>$(FLUTTER_BUILD_NUMBER)</string>
 		<key>LSRequiresIPhoneOS</key>
 		<true/>
-
 		<!-- Background Location: agar tracking tetap jalan saat app di-background -->
 		<key>UIBackgroundModes</key>
 		<array>
@@ -34,7 +33,6 @@
 			<string>fetch</string>
 			<string>processing</string>
 		</array>
-
 		<!-- Pesan izin lokasi yang ditampilkan ke user -->
 		<key>NSLocationWhenInUseUsageDescription</key>
 		<string>Trackie membutuhkan akses lokasi untuk menampilkan posisi Anda di peta grup.</string>
@@ -42,7 +40,6 @@
 		<string>Trackie membutuhkan akses lokasi di latar belakang agar posisi Anda tetap terlihat oleh anggota grup saat HP dikunci.</string>
 		<key>NSLocationAlwaysUsageDescription</key>
 		<string>Trackie membutuhkan akses lokasi di latar belakang agar posisi Anda tetap terlihat oleh anggota grup saat HP dikunci.</string>
-
 		<key>UIApplicationSceneManifest</key>
 		<dict>
 			<key>UIApplicationSupportsMultipleScenes</key>

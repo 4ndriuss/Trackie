@@ -2,6 +2,7 @@
 // Halaman utama setelah pengguna berhasil login atau mendaftar.
 // Menyediakan navigasi bawah (BottomNavigationBar) untuk berpindah antar tab (Home, Riwayat, Profil).
 import 'package:flutter/material.dart';
+import '../l10n/app_localizations.dart';
 import 'home_tab.dart';
 import 'history_tab.dart';
 import 'profile_tab.dart';
@@ -41,24 +42,25 @@ class _MainPageState extends State<MainPage> {
         },
         selectedItemColor: Theme.of(context).primaryColor,
         unselectedItemColor: Theme.of(context).colorScheme.secondary,
-        items: const [
+        items: [
           BottomNavigationBarItem(
-            icon: Icon(Icons.home_outlined),
-            activeIcon: Icon(Icons.home),
-            label: 'Home',
+            icon: const Icon(Icons.home_outlined),
+            activeIcon: const Icon(Icons.home),
+            label: AppLocalizations.of(context)!.navHome,
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.history_outlined),
-            activeIcon: Icon(Icons.history),
-            label: 'Riwayat',
+            icon: const Icon(Icons.history_outlined),
+            activeIcon: const Icon(Icons.history),
+            label: AppLocalizations.of(context)!.navHistory,
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline),
-            activeIcon: Icon(Icons.person),
-            label: 'Profil',
+            icon: const Icon(Icons.person_outline),
+            activeIcon: const Icon(Icons.person),
+            label: AppLocalizations.of(context)!.navProfile,
           ),
         ],
       ),
     );
   }
 }
+

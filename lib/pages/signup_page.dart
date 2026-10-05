@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/custom_textfield.dart';
+import 'privacy_policy_page.dart';
 
 class SignupPage extends StatefulWidget {
   const SignupPage({super.key});
@@ -16,20 +17,28 @@ class _SignupPageState extends State<SignupPage> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _vehicleController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
   bool _isLoading = false;
+  bool _agreedToTerms = false;
 
   @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
-    _vehicleController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
   void _handleSignup() async {
     if (_formKey.currentState!.validate()) {
+      if (_passwordController.text != _confirmPasswordController.text) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Konfirmasi password tidak cocok!')),
+        );
+        return;
+      }
+      
       setState(() => _isLoading = true);
       
       final authProvider = context.read<AuthProvider>();
@@ -37,7 +46,7 @@ class _SignupPageState extends State<SignupPage> {
         name: _nameController.text.trim(),
         email: _emailController.text.trim(),
         password: _passwordController.text,
-        vehicle: _vehicleController.text.trim(),
+        vehicle: '',
       );
       
       if (!mounted) return;
@@ -47,6 +56,9 @@ class _SignupPageState extends State<SignupPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(authProvider.error ?? 'Registrasi gagal')),
         );
+      } else {
+        // Jika berhasil, kembali ke route awal (AuthWrapper) yang akan otomatis memuat MainPage
+        Navigator.of(context).popUntil((route) => route.isFirst);
       }
     }
   }
@@ -128,14 +140,58 @@ class _SignupPageState extends State<SignupPage> {
                     ),
                     const SizedBox(height: AppSpacing.md),
                     CustomTextField(
-                      label: 'Vehicle Info (Optional)',
-                      hint: 'e.g. NMAX Hitam',
-                      controller: _vehicleController,
+                      label: 'Konfirmasi Password',
+                      hint: 'Ulangi password',
+                      isPassword: true,
+                      controller: _confirmPasswordController,
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Konfirmasi password tidak boleh kosong';
+                        }
+                        return null;
+                      },
                     ),
-                    const SizedBox(height: AppSpacing.xl),
+                    const SizedBox(height: AppSpacing.md),
+
+                    Row(
+                      children: [
+                        Checkbox(
+                          value: _agreedToTerms,
+                          activeColor: Theme.of(context).primaryColor,
+                          onChanged: (val) {
+                            setState(() => _agreedToTerms = val ?? false);
+                          },
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacyPolicyPage()));
+                            },
+                            child: Text(
+                              'Saya setuju dengan Syarat & Kebijakan Privasi terkait pelacakan lokasi',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Theme.of(context).primaryColor,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: AppSpacing.md),
                     ElevatedButton(
-                      onPressed: _isLoading ? null : _handleSignup,
-                      child: const Text('SIGN UP'),
+                      onPressed: (_isLoading || !_agreedToTerms) ? null : _handleSignup,
+                      child: const Text('DAFTAR'),
+                    ),
+                    const SizedBox(height: AppSpacing.md),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text('Sudah punya akun?', style: Theme.of(context).textTheme.bodyMedium),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Login'),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -144,7 +200,7 @@ class _SignupPageState extends State<SignupPage> {
           ),
           if (_isLoading)
             Container(
-              color: Colors.black.withOpacity(0.3),
+              color: Colors.black.withValues(alpha: 0.3),
               child: const Center(
                 child: CircularProgressIndicator(),
               ),
