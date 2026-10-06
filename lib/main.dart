@@ -6,6 +6,8 @@ import 'l10n/app_localizations.dart';
 
 import 'theme/app_theme.dart';
 import 'app.dart';
+import 'pages/login_page.dart';
+import 'pages/main_page.dart';
 import 'providers/auth_provider.dart';
 import 'providers/group_provider.dart';
 import 'providers/location_provider.dart';
@@ -24,7 +26,11 @@ void main() async {
   );
   
   if (!kIsWeb) {
-    await BackgroundLocationService.initialize();
+    try {
+      await BackgroundLocationService.initialize();
+    } catch (e) {
+      debugPrint('Failed to initialize background service: $e');
+    }
   }
   
   runApp(const TrackieApp());
@@ -63,7 +69,12 @@ class TrackieApp extends StatelessWidget {
               Locale('en', ''),
             ],
             debugShowCheckedModeBanner: false,
-            home: const AuthWrapper(),
+            initialRoute: '/',
+            routes: {
+              '/': (context) => const AuthWrapper(),
+              '/login': (context) => const LoginPage(),
+              '/home': (context) => const MainPage(),
+            },
           );
         },
       ),

@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
+
 import '../theme/app_theme.dart';
 import '../providers/auth_provider.dart';
 import '../l10n/app_localizations.dart';
@@ -10,9 +13,6 @@ import 'privacy_policy_page.dart';
 import 'preferences_page.dart';
 import 'account_page.dart';
 
-/// [ProfileTab] menampilkan informasi akun pengguna.
-/// Menampilkan foto profil, nama, informasi kendaraan, 
-/// serta menyediakan tombol untuk mengedit profil dan keluar (Log Out).
 class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
 
@@ -27,534 +27,431 @@ class _ProfileTabState extends State<ProfileTab> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Log Out'),
-        content: const Text('Apakah Anda yakin ingin keluar dari akun ini?'),
+        title: Text('Log Out', style: GoogleFonts.urbanist(fontWeight: FontWeight.bold)),
+        content: Text('Are you sure you want to log out?', style: GoogleFonts.urbanist()),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('BATAL'),
+            child: Text('Cancel', style: GoogleFonts.urbanist(color: Colors.grey)),
           ),
           TextButton(
             onPressed: () async {
-              Navigator.pop(ctx); // Tutup dialog
+              Navigator.pop(ctx);
               await context.read<AuthProvider>().logout();
+              if (context.mounted) {
+                Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+              }
             },
-            style: TextButton.styleFrom(
-              foregroundColor: Theme.of(context).colorScheme.error,
-            ),
-            child: const Text('KELUAR'),
+            child: Text('Log Out', style: GoogleFonts.urbanist(color: Colors.redAccent, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
     );
   }
 
-  Future<void> _pickImage(ImageSource source) async {
+  Future<void> _handleEditAvatar() async {
     final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(
-      source: source,
-      maxWidth: 800,
-      maxHeight: 800,
-      imageQuality: 80,
-    );
-
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+    
     if (pickedFile != null && mounted) {
       final bytes = await pickedFile.readAsBytes();
       final ext = pickedFile.name.split('.').last;
-      final authProvider = context.read<AuthProvider>();
       
-      final success = await authProvider.uploadProfilePicture(bytes, ext);
+      final authProvider = context.read<AuthProvider>();
+      await authProvider.updateProfilePicture(bytes, ext);
+      
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(success 
-                ? '✅ Foto profil berhasil diperbarui' 
-                : '❌ Gagal memperbarui foto profil'),
-            behavior: SnackBarBehavior.floating,
-          ),
+          const SnackBar(content: Text('Profile picture updated successfully!')),
         );
       }
     }
   }
 
-  void _showImagePicker(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(AppSpacing.md),
-              child: Text(
-                'Ubah Foto Profil',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.camera_alt),
-              title: const Text('Ambil dari Kamera'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _pickImage(ImageSource.camera);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library),
-              title: const Text('Pilih dari Galeri'),
-              onTap: () {
-                Navigator.pop(ctx);
-                _pickImage(ImageSource.gallery);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatItem(BuildContext context, String label, String value, String unit) {
-    final theme = Theme.of(context);
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Text(
-          label,
-          style: theme.textTheme.labelSmall?.copyWith(
-            color: theme.colorScheme.secondary,
-          ),
-        ),
-        const SizedBox(height: 4),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            Text(
-              value,
-              style: theme.textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-                fontSize: 20,
-              ),
-            ),
-            const SizedBox(width: 2),
-            Text(
-              unit,
-              style: theme.textTheme.labelSmall?.copyWith(
-                color: theme.primaryColor,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-          ],
-        ),
-      ],
-    );
+  String _getInitials(String name) {
+    if (name.trim().isEmpty) return "U";
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.length == 1) return parts[0].substring(0, 1).toUpperCase();
+    return (parts[0].substring(0, 1) + parts[1].substring(0, 1)).toUpperCase();
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final authProvider = context.watch<AuthProvider>();
-    final userProfile = authProvider.userProfile;
-    
-    return SafeArea(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
+    final user = context.watch<AuthProvider>().userProfile;
+    final userName = user?.name ?? 'User';
+    final userVehicle = (user?.vehicle != null && user!.vehicle.isNotEmpty) ? user.vehicle : 'Trackie Explorer';
+    final joinedDate = user != null ? DateFormat('MMM yyyy').format(user.createdAt) : 'Unknown';
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFF7F7FA),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: false,
+        title: Text(
+          'Profile',
+          style: GoogleFonts.urbanist(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF1A1A2E),
+          ),
+        ),
+        actions: [
           Padding(
-            padding: const EdgeInsets.all(AppSpacing.lg),
-            child: Text(
-              AppLocalizations.of(context)!.profileTitle,
-              style: theme.textTheme.displayLarge?.copyWith(fontSize: 32),
+            padding: const EdgeInsets.only(right: 16.0),
+            child: InkWell(
+              onTap: () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => const PreferencesPage()));
+              },
+              borderRadius: BorderRadius.circular(22),
+              child: Container(
+                width: 44,
+                height: 44,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF1F1F5),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(Icons.settings_outlined, color: Color(0xFF1A1A2E), size: 22),
+              ),
             ),
           ),
-          Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, 80),
-              child: Column(
-                children: [
-                  const SizedBox(height: AppSpacing.md),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    children: [
-                      // Foto Profil
-                      GestureDetector(
-                        onTap: () => _showImagePicker(context),
-                        child: Stack(
-                          children: [
-                            CircleAvatar(
-                              radius: 40,
-                              backgroundColor: theme.primaryColor.withValues(alpha: 0.1),
-                              backgroundImage: userProfile?.photoUrl != null
-                                  ? CachedNetworkImageProvider(userProfile!.photoUrl!)
-                                  : null,
-                              child: userProfile?.photoUrl == null
-                                  ? Icon(
-                                      Icons.person,
-                                      size: 40,
-                                      color: theme.primaryColor,
-                                    )
-                                  : null,
-                            ),
-                            if (authProvider.isLoading)
-                              const Positioned.fill(
-                                child: CircularProgressIndicator(),
-                              ),
-                            Positioned(
-                              bottom: 0,
-                              right: 0,
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  color: theme.primaryColor,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(color: theme.scaffoldBackgroundColor, width: 2),
-                                ),
-                                child: const Icon(
-                                  Icons.camera_alt,
-                                  size: 14,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.md),
-                      // Info Teks (Nama, Email, Info Kendaraan)
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              userProfile?.name ?? 'User',
-                              style: theme.textTheme.titleMedium?.copyWith(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            if (userProfile?.email != null) ...[
-                              const SizedBox(height: 2),
-                              Text(
-                                userProfile!.email,
-                                style: theme.textTheme.bodySmall?.copyWith(
-                                  color: AppTheme.textGrey,
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
-                            const SizedBox(height: 8),
-                            // Kendaraan
-                            if (userProfile?.vehicle != null && userProfile!.vehicle.isNotEmpty)
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                decoration: BoxDecoration(
-                                  color: theme.colorScheme.secondary.withValues(alpha: 0.1),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.two_wheeler,
-                                      size: 14,
-                                      color: theme.colorScheme.secondary,
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Flexible(
-                                      child: Text(
-                                        userProfile.vehicle,
-                                        style: theme.textTheme.bodySmall?.copyWith(
-                                          color: theme.colorScheme.secondary,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              )
-                            else
-                              GestureDetector(
-                                onTap: () {
-                                  Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountPage()));
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                  decoration: BoxDecoration(
-                                    color: theme.primaryColor.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(color: theme.primaryColor.withValues(alpha: 0.3)),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.add,
-                                        size: 14,
-                                        color: theme.primaryColor,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        'Tambah kendaraan',
-                                        style: theme.textTheme.bodySmall?.copyWith(
-                                          color: theme.primaryColor,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                      // Tombol Edit Profile
-                      IconButton(
-                        onPressed: () {
-                          Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountPage()));
-                        },
-                        icon: Icon(
-                          Icons.edit_outlined,
-                          color: theme.colorScheme.secondary,
-                        ),
-                        tooltip: 'Edit Profil',
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.xl),
-                  
-                  // Statistik Perjalanan (Touring Stats)
-                  Container(
-                    padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surface,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: theme.colorScheme.secondary.withValues(alpha: 0.2), // ignore: deprecated_member_use
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.03), // ignore: deprecated_member_use
-                          blurRadius: 10,
-                          offset: const Offset(0, 4),
-                        ),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        ],
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(
+            color: const Color(0xFFEDEDF2),
+            height: 1,
+          ),
+        ),
+      ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              // 2. Profile Header
+              Center(
+                child: Column(
+                  children: [
+                    Stack(
                       children: [
-                        Expanded(child: _buildStatItem(context, AppLocalizations.of(context)!.profileTotalDistance, '2.450', 'km')),
-                        Container(
-                          width: 1,
-                          height: 40,
-                          color: theme.colorScheme.secondary.withValues(alpha: 0.2), // ignore: deprecated_member_use
+                        CircleAvatar(
+                          radius: 50,
+                          backgroundColor: AppTheme.primary.withOpacity(0.2), // Adapted from lime green to Trackie Orange
+                          backgroundImage: (user?.photoUrl != null && user!.photoUrl!.isNotEmpty)
+                              ? CachedNetworkImageProvider(user.photoUrl!)
+                              : null,
+                          child: (user?.photoUrl == null || user!.photoUrl!.isEmpty)
+                              ? Text(
+                                  _getInitials(userName),
+                                  style: GoogleFonts.urbanist(
+                                    fontSize: 36,
+                                    fontWeight: FontWeight.bold,
+                                    color: AppTheme.primary, // Adapted from dark text
+                                  ),
+                                )
+                              : null,
                         ),
-                        Expanded(child: _buildStatItem(context, AppLocalizations.of(context)!.profileTouring, '12', 'kali')),
-                        Container(
-                          width: 1,
-                          height: 40,
-                          color: theme.colorScheme.secondary.withValues(alpha: 0.2), // ignore: deprecated_member_use
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: GestureDetector(
+                            onTap: _handleEditAvatar,
+                            child: Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2B2B2B),
+                                shape: BoxShape.circle,
+                                border: Border.all(color: Colors.white, width: 3),
+                              ),
+                              child: const Icon(Icons.edit, color: Colors.white, size: 16),
+                            ),
+                          ),
                         ),
-                        Expanded(child: _buildStatItem(context, AppLocalizations.of(context)!.profileRank, 'Veteran', '⭐️')),
                       ],
                     ),
-                  ),
-                  
-                  const SizedBox(height: AppSpacing.xl),
-                  
-                  // Pengaturan Privasi (Ghost Mode)
-                  Container(
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surface,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: theme.colorScheme.secondary.withValues(alpha: 0.2), // ignore: deprecated_member_use
+                    const SizedBox(height: 16),
+                    Text(
+                      userName,
+                      style: GoogleFonts.urbanist(
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                        color: const Color(0xFF1A1A2E),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$userVehicle · Joined $joinedDate',
+                      style: GoogleFonts.urbanist(
+                        fontSize: 16,
+                        color: const Color(0xFF5B5F97),
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 32),
+
+              // 3. Stats Card (Adapted to Trackie context but matching layout)
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: Row(
+                  children: [
+                    Expanded(child: const StatItem(value: '24', label: 'Routes')),
+                    Container(width: 1, height: 40, color: const Color(0xFFEDEDF2)),
+                    Expanded(child: const StatItem(value: '31', label: 'Tracked')),
+                    Container(width: 1, height: 40, color: const Color(0xFFEDEDF2)),
+                    Expanded(child: const StatItem(value: '18', label: 'Places')),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+
+              // 4. Streak Banner
+              const StreakBanner(streakDays: 7, subtitle: 'Keep it up to unlock the Explorer badge!'),
+              const SizedBox(height: 32),
+
+              // 5. Account Section
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8, bottom: 16),
+                      child: Text(
+                        'ACCOUNT',
+                        style: GoogleFonts.urbanist(
+                          fontSize: 13,
+                          letterSpacing: 1,
+                          fontWeight: FontWeight.w600,
+                          color: const Color(0xFF6B6F9A),
+                        ),
                       ),
                     ),
-                    child: SwitchListTile(
-                      value: _isGhostMode,
-                      onChanged: (value) {
-                        setState(() {
-                          _isGhostMode = value;
-                        });
+                    ProfileMenuTile(
+                      icon: Icons.manage_accounts_outlined,
+                      title: 'Account Details',
+                      onTap: () {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const AccountPage()));
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                    ProfileMenuTile(
+                      icon: _isGhostMode ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                      title: 'Ghost Mode',
+                      badge: _isGhostMode ? 'ON' : 'OFF',
+                      onTap: () {
+                        setState(() => _isGhostMode = !_isGhostMode);
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text(
-                              value 
-                                  ? '👻 Mode Hantu Aktif: Lokasi disembunyikan' 
-                                  : '📍 Mode Hantu Nonaktif: Lokasi dibagikan',
-                            ),
+                            content: Text(_isGhostMode ? 'Ghost Mode Activated' : 'Ghost Mode Deactivated'),
                           ),
                         );
                       },
-                      title: Text(AppLocalizations.of(context)!.profileGhostMode, style: const TextStyle(fontWeight: FontWeight.bold)),
-                      subtitle: Text(AppLocalizations.of(context)!.profileGhostModeDesc),
-                      secondary: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: _isGhostMode 
-                              ? theme.colorScheme.error.withValues(alpha: 0.1) // ignore: deprecated_member_use
-                              : theme.colorScheme.secondary.withValues(alpha: 0.1), // ignore: deprecated_member_use
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          _isGhostMode ? Icons.visibility_off : Icons.visibility,
-                          color: _isGhostMode ? theme.colorScheme.error : theme.colorScheme.secondary,
-                        ),
-                      ),
-                      activeTrackColor: theme.colorScheme.error.withValues(alpha: 0.5), // ignore: deprecated_member_use
-                      activeThumbColor: theme.colorScheme.error,
                     ),
-                  ),
-
-                  const SizedBox(height: AppSpacing.xl),
-
-                  // === MENU PENGATURAN ===
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 4),
-                      child: Text(
-                        AppLocalizations.of(context)!.profileSettings,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: theme.colorScheme.secondary,
-                          letterSpacing: 1.5,
-                        ),
-                      ),
+                    const SizedBox(height: 12),
+                    ProfileMenuTile(
+                      icon: Icons.privacy_tip_outlined,
+                      title: 'Privacy Policy',
+                      onTap: () {
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => const PrivacyPolicyPage()));
+                      },
                     ),
-                  ),
-                  const SizedBox(height: AppSpacing.sm),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: theme.colorScheme.surface,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: theme.colorScheme.secondary.withValues(alpha: 0.2), // ignore: deprecated_member_use
-                      ),
+                    const SizedBox(height: 12),
+                    ProfileMenuTile(
+                      icon: Icons.logout_rounded,
+                      title: 'Log Out',
+                      iconColor: Colors.redAccent,
+                      titleColor: Colors.redAccent,
+                      onTap: () => _handleLogout(context),
                     ),
-                    child: Column(
-                      children: [
-                        // Preferensi
-                        _buildMenuTile(
-                          theme,
-                          icon: Icons.tune,
-                          iconColor: Colors.blue,
-                          title: AppLocalizations.of(context)!.profilePreferences,
-                          subtitle: AppLocalizations.of(context)!.profilePreferencesDesc,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const PreferencesPage()),
-                            );
-                          },
-                        ),
-                        _buildMenuDivider(theme),
-                        // Akun
-                        _buildMenuTile(
-                          theme,
-                          icon: Icons.manage_accounts_outlined,
-                          iconColor: Colors.teal,
-                          title: AppLocalizations.of(context)!.profileAccount,
-                          subtitle: AppLocalizations.of(context)!.profileAccountDesc,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const AccountPage()),
-                            );
-                          },
-                        ),
-                        _buildMenuDivider(theme),
-                        // Kebijakan Privasi
-                        _buildMenuTile(
-                          theme,
-                          icon: Icons.privacy_tip_outlined,
-                          iconColor: Colors.orange,
-                          title: AppLocalizations.of(context)!.profilePrivacy,
-                          subtitle: AppLocalizations.of(context)!.profilePrivacyDesc,
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const PrivacyPolicyPage()),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: AppSpacing.xxl),
-                  // Tombol Log Out
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: () => _handleLogout(context),
-                      icon: const Icon(Icons.logout),
-                      label: Text(AppLocalizations.of(context)!.profileLogout),
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: theme.colorScheme.error,
-                        side: BorderSide(color: theme.colorScheme.error),
-                        padding: const EdgeInsets.symmetric(vertical: 16),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.lg),
-                  // Versi Aplikasi
-                  Text(
-                    'Trackie v1.0.0',
-                    style: theme.textTheme.labelSmall?.copyWith(
-                      color: theme.colorScheme.secondary.withValues(alpha: 0.5), // ignore: deprecated_member_use
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.md),
-                ],
+                  ],
+                ),
               ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// --- Reusable Widgets ---
+
+class StatItem extends StatelessWidget {
+  final String value;
+  final String label;
+
+  const StatItem({super.key, required this.value, required this.label});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          value,
+          style: GoogleFonts.urbanist(
+            fontSize: 24,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF1A1A2E),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: GoogleFonts.urbanist(
+            fontSize: 15,
+            color: const Color(0xFF5B5F97),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class StreakBanner extends StatelessWidget {
+  final int streakDays;
+  final String subtitle;
+
+  const StreakBanner({super.key, required this.streakDays, required this.subtitle});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: const Color(0xFF1C1F1C),
+        borderRadius: BorderRadius.circular(28),
+      ),
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        children: [
+          Container(
+            width: 56,
+            height: 56,
+            decoration: BoxDecoration(
+              color: AppTheme.primary.withOpacity(0.2), // Adapted to Trackie theme
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Icon(Icons.local_fire_department, color: AppTheme.primary, size: 32),
+          ),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  '$streakDays-day tracking streak',
+                  style: GoogleFonts.urbanist(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.urbanist(
+                    fontSize: 14,
+                    color: const Color(0xFFA8ABB0),
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _buildMenuTile(
-    ThemeData theme, {
-    required IconData icon,
-    required Color iconColor,
-    required String title,
-    required String subtitle,
-    required VoidCallback onTap,
-  }) {
-    return ListTile(
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(
-          color: iconColor.withValues(alpha: 0.1), // ignore: deprecated_member_use
-          shape: BoxShape.circle,
+class ProfileMenuTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String? badge;
+  final VoidCallback onTap;
+  final Color? iconColor;
+  final Color? titleColor;
+
+  const ProfileMenuTile({
+    super.key,
+    required this.icon,
+    required this.title,
+    this.badge,
+    required this.onTap,
+    this.iconColor,
+    this.titleColor,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: const Color(0xFFF1F1F5),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Icon(icon, color: iconColor ?? const Color(0xFF6B6F9A), size: 22),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  title,
+                  style: GoogleFonts.urbanist(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w500,
+                    color: titleColor ?? const Color(0xFF1A1A2E),
+                  ),
+                ),
+              ),
+              if (badge != null) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF1F1F5),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    badge!,
+                    style: GoogleFonts.urbanist(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF6B6F9A),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+              ],
+              Icon(Icons.chevron_right, color: const Color(0xFFC4C4D4), size: 24),
+            ],
+          ),
         ),
-        child: Icon(icon, color: iconColor, size: 20),
       ),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w600)),
-      subtitle: Text(subtitle),
-      trailing: Icon(Icons.chevron_right, color: theme.colorScheme.secondary),
-      onTap: onTap,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
-      ),
-    );
-  }
-
-  Widget _buildMenuDivider(ThemeData theme) {
-    return Divider(
-      height: 1,
-      indent: AppSpacing.md,
-      endIndent: AppSpacing.md,
-      color: theme.colorScheme.secondary.withValues(alpha: 0.15), // ignore: deprecated_member_use
     );
   }
 }

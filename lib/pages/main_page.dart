@@ -1,13 +1,11 @@
-// File: main_page.dart
-// Halaman utama setelah pengguna berhasil login atau mendaftar.
-// Menyediakan navigasi bawah (BottomNavigationBar) untuk berpindah antar tab (Home, Riwayat, Profil).
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../l10n/app_localizations.dart';
+import '../theme/app_theme.dart';
 import 'home_tab.dart';
 import 'history_tab.dart';
 import 'profile_tab.dart';
 
-/// [MainPage] adalah kerangka utama yang mengatur navigasi berbasis tab di aplikasi.
 class MainPage extends StatefulWidget {
   const MainPage({super.key});
 
@@ -16,49 +14,59 @@ class MainPage extends StatefulWidget {
 }
 
 class _MainPageState extends State<MainPage> {
-  // Indeks tab yang sedang aktif, dimulai dari 0 (Home)
-  int _selectedIndex = 0;
+  int _selectedIndex = 1; // Default to History since we are working on it, or 0 for Home. Let's use 1.
 
-  // Daftar halaman/tab yang bisa dinavigasikan melalui BottomNavigationBar
   final List<Widget> _tabs = [
-    const HomeTab(), // Tab Home (Beranda)
-    const HistoryTab(), // Tab Riwayat (History)
-    const ProfileTab(), // Tab Profil (Profile)
+    const HomeTab(),
+    const HistoryTab(),
+    const ProfileTab(),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Menampilkan konten tab sesuai indeks yang dipilih
       body: _tabs[_selectedIndex],
-      // Navigasi bawah
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) {
-          // Memperbarui state agar tampilan beralih ke tab yang dipilih
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
-        selectedItemColor: Theme.of(context).primaryColor,
-        unselectedItemColor: Theme.of(context).colorScheme.secondary,
-        items: [
-          BottomNavigationBarItem(
-            icon: const Icon(Icons.home_outlined),
-            activeIcon: const Icon(Icons.home),
-            label: AppLocalizations.of(context)!.navHome,
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, -5),
+            ),
+          ],
+        ),
+        child: SafeArea(
+          child: BottomNavigationBar(
+            currentIndex: _selectedIndex,
+            onTap: (index) => setState(() => _selectedIndex = index),
+            backgroundColor: Colors.white,
+            type: BottomNavigationBarType.fixed,
+            elevation: 0,
+            selectedItemColor: AppTheme.primary,
+            unselectedItemColor: const Color(0xFF8E91B5),
+            selectedLabelStyle: GoogleFonts.urbanist(fontSize: 13, fontWeight: FontWeight.w600),
+            unselectedLabelStyle: GoogleFonts.urbanist(fontSize: 13, fontWeight: FontWeight.w500),
+            items: [
+              BottomNavigationBarItem(
+                icon: const Icon(Icons.home_outlined),
+                activeIcon: const Icon(Icons.home),
+                label: AppLocalizations.of(context)?.navHome ?? 'Home',
+              ),
+              BottomNavigationBarItem(
+                icon: const Icon(Icons.history_outlined),
+                activeIcon: const Icon(Icons.history),
+                label: AppLocalizations.of(context)?.navHistory ?? 'History',
+              ),
+              BottomNavigationBarItem(
+                icon: const Icon(Icons.person_outline),
+                activeIcon: const Icon(Icons.person),
+                label: AppLocalizations.of(context)?.navProfile ?? 'Profile',
+              ),
+            ],
           ),
-          BottomNavigationBarItem(
-            icon: const Icon(Icons.history_outlined),
-            activeIcon: const Icon(Icons.history),
-            label: AppLocalizations.of(context)!.navHistory,
-          ),
-          BottomNavigationBarItem(
-            icon: const Icon(Icons.person_outline),
-            activeIcon: const Icon(Icons.person),
-            label: AppLocalizations.of(context)!.navProfile,
-          ),
-        ],
+        ),
       ),
     );
   }

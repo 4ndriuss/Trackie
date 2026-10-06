@@ -70,19 +70,25 @@ class AuthProvider extends ChangeNotifier {
     required String email,
     required String password,
     String vehicle = '',
+    String? phone,
+    DateTime? birthDate,
   }) async {
     try {
       _isLoading = true;
       _error = null;
       notifyListeners();
 
-      await _authService.signUp(
+      final credential = await _authService.signUp(
         name: name,
         email: email,
         password: password,
         vehicle: vehicle,
+        phone: phone,
+        birthDate: birthDate,
       );
-      // Auth state listener akan handle sisanya
+      await credential.user?.updateDisplayName(name);
+      await _authService.signOut(); // Sign out to prevent auto-login
+      
       _isLoading = false;
       notifyListeners();
       return true;
@@ -96,6 +102,72 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return false;
+    }
+  }
+
+  Future<bool> loginWithGoogle() async {
+    try {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+
+      final credential = await _authService.signInWithGoogle();
+      
+      _isLoading = false;
+      notifyListeners();
+      return credential != null; // returns true if successful, false if cancelled
+    } on FirebaseAuthException catch (e) {
+      _error = _getAuthErrorMessage(e.code);
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _error = 'Terjadi kesalahan. Silakan coba lagi.';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> loginWithFacebook() async {
+    try {
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+
+      final credential = await _authService.signInWithFacebook();
+      
+      _isLoading = false;
+      notifyListeners();
+      return credential != null; // returns true if successful, false if cancelled
+    } on FirebaseAuthException catch (e) {
+      _error = _getAuthErrorMessage(e.code);
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    } catch (e) {
+      _error = 'Terjadi kesalahan. Silakan coba lagi.';
+      _isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<void> updateProfilePicture(Uint8List fileBytes, String ext) async {
+    if (_user == null) return;
+    try {
+      _isLoading = true;
+      notifyListeners();
+      
+      final downloadUrl = await _authService.uploadProfilePicture(_user!.uid, fileBytes, ext);
+      if (downloadUrl != null && _userProfile != null) {
+        _userProfile = _userProfile!.copyWith(photoUrl: downloadUrl);
+      }
+    } catch (e) {
+      _error = e.toString();
+    } finally {
+      _isLoading = false;
+      notifyListeners();
     }
   }
 
@@ -195,23 +267,24 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Menerjemahkan kode error Firebase Auth ke pesan yang user-friendly.
   String _getAuthErrorMessage(String code) {
     switch (code) {
       case 'user-not-found':
-        return 'Akun tidak ditemukan.';
       case 'wrong-password':
-        return 'Password salah.';
+      case 'invalid-credential':
+        return 'Incorrect email or password.';
       case 'email-already-in-use':
-        return 'Email sudah terdaftar.';
+        return 'This email is already registered.';
       case 'weak-password':
-        return 'Password terlalu lemah (minimal 6 karakter).';
+        return 'Password must be at least 6 characters.';
       case 'invalid-email':
-        return 'Format email tidak valid.';
+        return 'The email format is not valid.';
       case 'too-many-requests':
-        return 'Terlalu banyak percobaan. Coba lagi nanti.';
+        return 'Too many attempts. Please try again later.';
+      case 'network-request-failed':
+        return 'No internet connection.';
       default:
-        return 'Terjadi kesalahan autentikasi.';
+        return 'Something went wrong. Please try again.';
     }
   }
 }

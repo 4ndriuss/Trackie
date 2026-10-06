@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import '../l10n/app_localizations.dart';
-
+import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../providers/auth_provider.dart';
-import 'signup_page.dart';
 import '../widgets/custom_textfield.dart';
+import '../widgets/primary_button.dart';
+import '../widgets/social_button.dart';
+import '../widgets/status_dialog.dart';
+import 'signup_page.dart';
+import 'onboarding_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -27,7 +31,7 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  void _handleLogin() async {
+  Future<void> _handleLogin() async {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
       
@@ -40,9 +44,22 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
       setState(() => _isLoading = false);
       
-      if (!success) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(authProvider.error ?? 'Login gagal')),
+      if (success) {
+        await showSuccessDialog(
+          context,
+          title: 'Welcome Back!',
+          message: 'You have logged in successfully.',
+          buttonText: 'Continue',
+          onPressed: () {
+            Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+          },
+        );
+      } else {
+        await showErrorDialog(
+          context,
+          title: 'Login Failed',
+          message: authProvider.error ?? 'Incorrect email or password.',
+          buttonText: 'Try Again',
         );
       }
     }
@@ -53,18 +70,29 @@ class _LoginPageState extends State<LoginPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Lupa Password'),
-        content: TextField(
-          controller: emailController,
-          decoration: const InputDecoration(labelText: 'Email', hintText: 'name@example.com'),
-          keyboardType: TextInputType.emailAddress,
+        title: Text('Reset Password', style: GoogleFonts.urbanist(fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Enter your email to receive a password reset link.', style: GoogleFonts.urbanist(color: Colors.grey[700])),
+            const SizedBox(height: 16),
+            TextField(
+              controller: emailController,
+              decoration: InputDecoration(
+                labelText: 'Email',
+                hintText: 'name@example.com',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              keyboardType: TextInputType.emailAddress,
+            ),
+          ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('BATAL'),
+            child: Text('Cancel', style: GoogleFonts.urbanist(color: Colors.grey)),
           ),
-          TextButton(
+          ElevatedButton(
             onPressed: () async {
               Navigator.pop(ctx);
               final email = emailController.text.trim();
@@ -76,16 +104,26 @@ class _LoginPageState extends State<LoginPage> {
                 if (!mounted) return;
                 setState(() => _isLoading = false);
                 
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(success 
-                      ? 'Email reset password telah dikirim' 
-                      : (authProvider.error ?? 'Gagal mengirim email reset password')),
-                  ),
-                );
+                if (success) {
+                  await showSuccessDialog(
+                    context,
+                    title: 'Email Sent',
+                    message: 'A password reset link has been sent to $email.',
+                    buttonText: 'OK',
+                    onPressed: () => Navigator.of(context).pop(),
+                  );
+                } else {
+                  await showErrorDialog(
+                    context,
+                    title: 'Reset Failed',
+                    message: authProvider.error ?? 'Failed to send reset email.',
+                    buttonText: 'Try Again',
+                  );
+                }
               }
             },
-            child: const Text('KIRIM'),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary),
+            child: Text('Send Link', style: GoogleFonts.urbanist(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -95,113 +133,212 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: Stack(
-        children: [
-          SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(AppSpacing.lg),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    const SizedBox(height: 32),
-                    Center(
-                      child: Image.asset(
-                        'assets/images/logo.png',
-                        height: 100,
-                        fit: BoxFit.contain,
+      backgroundColor: Colors.white,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Color(0xFF1A1A1A)),
+          onPressed: () {
+            Navigator.pushReplacement(
+              context,
+              MaterialPageRoute(builder: (_) => const OnboardingPage()),
+            );
+          },
+        ),
+      ),
+      body: SafeArea(
+        child: Column(
+          children: [
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const SizedBox(height: 16),
+                      // App logo at top left
+                      Row(
+                        children: [
+                          Icon(Icons.track_changes, color: AppTheme.primary, size: 32),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Trackie',
+                            style: GoogleFonts.urbanist(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: const Color(0xFF1A1A1A),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      'Trackie',
-                      style: Theme.of(context).textTheme.displayLarge,
-                      textAlign: TextAlign.center,
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    Text(
-                      AppLocalizations.of(context)!.loginSubtitle,
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: Theme.of(context).colorScheme.secondary,
-                      ),
-                    ),
-                    const SizedBox(height: 64),
-                    CustomTextField(
-                      label: AppLocalizations.of(context)!.emailLabel,
-                      hint: AppLocalizations.of(context)!.emailHint,
-                      keyboardType: TextInputType.emailAddress,
-                      controller: _emailController,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Email tidak boleh kosong'; // TODO: localize errors too
-                        }
-                        if (!value.contains('@')) {
-                          return 'Format email tidak valid';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: AppSpacing.md),
-                    CustomTextField(
-                      label: AppLocalizations.of(context)!.passwordLabel,
-                      hint: AppLocalizations.of(context)!.passwordHint,
-                      isPassword: true,
-                      controller: _passwordController,
-                      validator: (value) {
-                        if (value == null || value.isEmpty) {
-                          return 'Password tidak boleh kosong';
-                        }
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: AppSpacing.sm),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton(
-                        onPressed: _showForgotPasswordDialog,
-                        child: Text(AppLocalizations.of(context)!.forgotPassword),
-                      ),
-                    ),
-                    const SizedBox(height: AppSpacing.lg),
-                    ElevatedButton(
-                      onPressed: _isLoading ? null : _handleLogin,
-                      child: Text(AppLocalizations.of(context)!.loginButton),
-                    ),
-                    const SizedBox(height: AppSpacing.xl),
-                    Wrap(
-                      alignment: WrapAlignment.center,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        Text(
-                          AppLocalizations.of(context)!.noAccount,
-                          style: Theme.of(context).textTheme.bodyMedium,
+                      const SizedBox(height: 40),
+                      Text(
+                        'Sign in to your\nAccount',
+                        style: GoogleFonts.urbanist(
+                          fontSize: 32,
+                          fontWeight: FontWeight.bold,
+                          color: const Color(0xFF1A1A1A),
+                          height: 1.2,
                         ),
-                        TextButton(
-                          onPressed: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (_) => const SignupPage()),
-                            );
-                          },
-                          child: Text(AppLocalizations.of(context)!.signUp),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Enter your email and password to log in',
+                        style: GoogleFonts.urbanist(
+                          fontSize: 14,
+                          color: const Color(0xFF6B7280),
                         ),
-                      ],
-                    ),
-                  ],
+                      ),
+                      const SizedBox(height: 32),
+                      CustomTextField(
+                        label: 'Email',
+                        hint: 'name@example.com',
+                        keyboardType: TextInputType.emailAddress,
+                        controller: _emailController,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) return 'Email cannot be empty';
+                          if (!value.contains('@')) return 'Invalid email format';
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      CustomTextField(
+                        label: 'Password',
+                        hint: '••••••••',
+                        isPassword: true,
+                        controller: _passwordController,
+                        validator: (value) {
+                          if (value == null || value.isEmpty) return 'Password cannot be empty';
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: _showForgotPasswordDialog,
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            minimumSize: const Size(50, 30),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          ),
+                          child: Text(
+                            'Forgot Password ?',
+                            style: GoogleFonts.urbanist(
+                              color: AppTheme.primary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+                      PrimaryButton(
+                        text: 'Log In',
+                        onPressed: _handleLogin,
+                        isLoading: _isLoading,
+                      ),
+                      const SizedBox(height: 32),
+                      Row(
+                        children: [
+                          const Expanded(child: Divider(color: Color(0xFFE5E7EB))),
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            child: Text(
+                              'Or',
+                              style: GoogleFonts.urbanist(
+                                color: const Color(0xFF6B7280),
+                                fontSize: 14,
+                              ),
+                            ),
+                          ),
+                          const Expanded(child: Divider(color: Color(0xFFE5E7EB))),
+                        ],
+                      ),
+                      const SizedBox(height: 32),
+                      SocialButton(
+                        text: 'Continue with Google',
+                        icon: const Icon(Icons.g_mobiledata, color: Colors.blue, size: 28),
+                        onPressed: () async {
+                          // HARDCODED UNTUK PROTOTYPE
+                          setState(() => _isLoading = true);
+                          await Future.delayed(const Duration(seconds: 1, milliseconds: 500));
+                          
+                          if (!mounted) return;
+                          setState(() => _isLoading = false);
+                          
+                          await showSuccessDialog(
+                            context,
+                            title: 'Welcome Back!',
+                            message: 'You have logged in successfully with Google (Prototype).',
+                            buttonText: 'Continue',
+                            onPressed: () {
+                              Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+                            },
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      SocialButton(
+                        text: 'Continue with Facebook',
+                        icon: const Icon(Icons.facebook, color: Colors.blueAccent, size: 24),
+                        onPressed: () async {
+                          // HARDCODED UNTUK PROTOTYPE
+                          setState(() => _isLoading = true);
+                          await Future.delayed(const Duration(seconds: 1, milliseconds: 500));
+                          
+                          if (!mounted) return;
+                          setState(() => _isLoading = false);
+                          
+                          await showSuccessDialog(
+                            context,
+                            title: 'Welcome Back!',
+                            message: 'You have logged in successfully with Facebook (Prototype).',
+                            buttonText: 'Continue',
+                            onPressed: () {
+                              Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+                            },
+                          );
+                        },
+                      ),
+                      const SizedBox(height: 24),
+                    ],
+                  ),
                 ),
               ),
             ),
-          ),
-          if (_isLoading)
-            Container(
-              color: Colors.black.withValues(alpha: 0.3),
-              child: const Center(
-                child: CircularProgressIndicator(),
+            Padding(
+              padding: const EdgeInsets.all(24.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    "Don't have an account? ",
+                    style: GoogleFonts.urbanist(color: const Color(0xFF6B7280)),
+                  ),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const SignupPage()),
+                      );
+                    },
+                    child: Text(
+                      'Sign Up',
+                      style: GoogleFonts.urbanist(
+                        color: AppTheme.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
-        ],
+          ],
+        ),
       ),
     );
   }

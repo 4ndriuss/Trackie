@@ -14,6 +14,12 @@ class UserModel {
   /// Jenis atau nomor kendaraan pengguna (opsional, default string kosong)
   final String vehicle;
 
+  /// Nomor telepon dengan kode negara
+  final String? phone;
+
+  /// Tanggal lahir
+  final DateTime? birthDate;
+
   /// Tanggal dan waktu akun dibuat
   final DateTime createdAt;
 
@@ -26,6 +32,8 @@ class UserModel {
     required this.name,
     required this.email,
     this.vehicle = '',
+    this.phone,
+    this.birthDate,
     this.photoUrl,
     DateTime? createdAt,
     DateTime? joinedAt,
@@ -47,6 +55,8 @@ class UserModel {
       name: map['name'] as String? ?? '',
       email: map['email'] as String? ?? '',
       vehicle: map['vehicle'] as String? ?? '',
+      phone: map['phone'] as String?,
+      birthDate: map['birthDate'] != null ? _parseDateTime(map['birthDate']) : null,
       photoUrl: map['photoUrl'] as String?,
       createdAt: _parseDateTime(map['createdAt'] ?? map['joinedAt']),
     );
@@ -59,6 +69,8 @@ class UserModel {
       'name': name,
       'email': email,
       'vehicle': vehicle,
+      'phone': phone,
+      'birthDate': birthDate != null ? Timestamp.fromDate(birthDate!) : null,
       'photoUrl': photoUrl,
       'createdAt': Timestamp.fromDate(createdAt),
       'joinedAt': Timestamp.fromDate(createdAt),
@@ -74,6 +86,8 @@ class UserModel {
     String? name,
     String? email,
     String? vehicle,
+    String? phone,
+    DateTime? birthDate,
     String? photoUrl,
     DateTime? createdAt,
   }) {
@@ -82,6 +96,8 @@ class UserModel {
       name: name ?? this.name,
       email: email ?? this.email,
       vehicle: vehicle ?? this.vehicle,
+      phone: phone ?? this.phone,
+      birthDate: birthDate ?? this.birthDate,
       photoUrl: photoUrl ?? this.photoUrl,
       createdAt: createdAt ?? this.createdAt,
     );
@@ -101,7 +117,7 @@ class UserModel {
 
   @override
   String toString() {
-    return 'UserModel(uid: $uid, name: $name, email: $email, vehicle: $vehicle, createdAt: $createdAt)';
+    return 'UserModel(uid: $uid, name: $name, email: $email, vehicle: $vehicle, phone: $phone, birthDate: $birthDate, createdAt: $createdAt)';
   }
 
   @override
@@ -112,6 +128,8 @@ class UserModel {
         other.name == name &&
         other.email == email &&
         other.vehicle == vehicle &&
+        other.phone == phone &&
+        other.birthDate == birthDate &&
         other.createdAt == createdAt;
   }
 
@@ -121,6 +139,8 @@ class UserModel {
         name.hashCode ^
         email.hashCode ^
         vehicle.hashCode ^
+        phone.hashCode ^
+        birthDate.hashCode ^
         createdAt.hashCode;
   }
 }

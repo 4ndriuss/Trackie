@@ -107,7 +107,12 @@ Future<void> _onStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
 
   // Inisialisasi Firebase di background isolate
-  await Firebase.initializeApp();
+  try {
+    await Firebase.initializeApp(); // On Android, google-services.json usually handles this automatically
+  } catch (e) {
+    debugPrint('Firebase already initialized or error: $e');
+  }
+  
   final rtdb = FirebaseDatabase.instance;
 
   String? groupId;

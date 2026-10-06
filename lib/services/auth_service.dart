@@ -7,6 +7,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 import '../models/user_model.dart';
 
 /// [AuthService] menyediakan semua operasi terkait autentikasi dan profil pengguna.
@@ -31,6 +33,8 @@ class AuthService {
     required String email,
     required String password,
     String vehicle = '',
+    String? phone,
+    DateTime? birthDate,
   }) async {
     final credential = await _auth.createUserWithEmailAndPassword(
       email: email,
@@ -43,6 +47,8 @@ class AuthService {
         name: name,
         email: email,
         vehicle: vehicle,
+        phone: phone,
+        birthDate: birthDate,
         createdAt: DateTime.now(),
       );
 
@@ -53,6 +59,73 @@ class AuthService {
     }
 
     return credential;
+  }
+
+  /// Login dengan Google
+  Future<UserCredential?> signInWithGoogle() async {
+    try {
+      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) return null; // Batal login
+
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final AuthCredential credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final userCredential = await _auth.signInWithCredential(credential);
+      
+      // Jika user baru, buat profil di Firestore
+      if (userCredential.user != null && userCredential.additionalUserInfo?.isNewUser == true) {
+        final user = UserModel(
+          uid: userCredential.user!.uid,
+          name: userCredential.user!.displayName ?? 'User',
+          email: userCredential.user!.email ?? '',
+          createdAt: DateTime.now(),
+        );
+
+        await _firestore
+            .collection('users')
+            .doc(userCredential.user!.uid)
+            .set(user.toFirestore());
+      }
+      return userCredential;
+    } catch (e) {
+      debugPrint('Error signing in with Google: $e');
+      rethrow;
+    }
+  }
+
+  /// Login dengan Facebook
+  Future<UserCredential?> signInWithFacebook() async {
+    try {
+      final LoginResult result = await FacebookAuth.instance.login();
+      if (result.status == LoginStatus.success) {
+        final AuthCredential credential = FacebookAuthProvider.credential(result.accessToken!.tokenString);
+        final userCredential = await _auth.signInWithCredential(credential);
+        
+        // Jika user baru, buat profil di Firestore
+        if (userCredential.user != null && userCredential.additionalUserInfo?.isNewUser == true) {
+          final user = UserModel(
+            uid: userCredential.user!.uid,
+            name: userCredential.user!.displayName ?? 'User',
+            email: userCredential.user!.email ?? '',
+            createdAt: DateTime.now(),
+          );
+
+          await _firestore
+              .collection('users')
+              .doc(userCredential.user!.uid)
+              .set(user.toFirestore());
+        }
+        return userCredential;
+      } else {
+        return null;
+      }
+    } catch (e) {
+      debugPrint('Error signing in with Facebook: $e');
+      rethrow;
+    }
   }
 
   /// Keluar dari akun.
