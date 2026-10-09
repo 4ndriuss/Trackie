@@ -28,21 +28,21 @@ class _OnboardingPageState extends State<OnboardingPage> {
 
   final List<OnboardingItem> _items = [
     OnboardingItem(
-      title: "Your Adventures Starts Here",
+      title: "Your Adventure Starts Here",
       description:
-          "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s.",
+          "Discover new places, plan exciting journeys, and capture unforgettable memories as you explore the world around you.",
       imagePath: "assets/images/dino-reichmuth-A5rCN8626Ck-unsplash.jpg",
     ),
     OnboardingItem(
       title: "Track Your Daily Trips",
       description:
-          "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s.",
+          "Effortlessly record your routes, analyze your travel patterns, and keep a detailed history of all your daily commutes.",
       imagePath: "assets/images/paul-green-gOHfFgwyDNM-unsplash.jpg", 
     ),
     OnboardingItem(
       title: "Stay Connected With Friends",
       description:
-          "Lorem Ipsum is simply dummy text of the printing and typesetting industry. Lorem Ipsum has been the industry's standard dummy text ever since the 1500s.",
+          "Share your adventures, find travel buddies, and stay updated with your friends' latest journeys in real-time.",
       imagePath: "assets/images/toomas-tartes-Yizrl9N_eDA-unsplash.jpg",
     ),
   ];
