@@ -28,6 +28,7 @@ class _SignupPageState extends State<SignupPage> {
   DateTime? _selectedBirthDate;
   String _selectedCountryCode = '+62';
   bool _isLoading = false;
+  bool _submitted = false;
 
   @override
   void dispose() {
@@ -66,6 +67,7 @@ class _SignupPageState extends State<SignupPage> {
   }
 
   Future<void> _handleSignup() async {
+    setState(() => _submitted = true);
     if (_formKey.currentState!.validate()) {
       if (_selectedBirthDate == null) {
         await showErrorDialog(
@@ -214,7 +216,7 @@ class _SignupPageState extends State<SignupPage> {
                           ),
                         ),
                       ),
-                      if (_formKey.currentState != null && _selectedBirthDate == null && !_formKey.currentState!.validate())
+                      if (_submitted && _selectedBirthDate == null)
                         Padding(
                           padding: const EdgeInsets.only(top: 8, left: 16),
                           child: Text(

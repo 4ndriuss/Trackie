@@ -208,13 +208,13 @@ class _AccountPageState extends State<AccountPage> {
     );
   }
 
-  void _showEditProfileDialog(BuildContext context) {
+  Future<void> _showEditProfileDialog(BuildContext context) async {
     final authProvider = context.read<AuthProvider>();
     final userProfile = authProvider.userProfile;
     final nameController = TextEditingController(text: userProfile?.name ?? '');
     final vehicleController = TextEditingController(text: userProfile?.vehicle ?? '');
 
-    showDialog(
+    final shouldSave = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Edit Profil'),
@@ -240,32 +240,38 @@ class _AccountPageState extends State<AccountPage> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
+            onPressed: () => Navigator.pop(ctx, false),
             child: const Text('BATAL'),
           ),
           TextButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              final success = await authProvider.updateProfile(
-                name: nameController.text.trim(),
-                vehicle: vehicleController.text.trim(),
-              );
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      success ? '✅ Profil berhasil diperbarui' : '❌ Gagal memperbarui profil',
-                    ),
-                    behavior: SnackBarBehavior.floating,
-                  ),
-                );
-              }
-            },
+            onPressed: () => Navigator.pop(ctx, true),
             child: const Text('SIMPAN'),
           ),
         ],
       ),
     );
+
+    final newName = nameController.text.trim();
+    final newVehicle = vehicleController.text.trim();
+    nameController.dispose();
+    vehicleController.dispose();
+
+    if (shouldSave == true && context.mounted) {
+      final success = await authProvider.updateProfile(
+        name: newName,
+        vehicle: newVehicle,
+      );
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              success ? '✅ Profil berhasil diperbarui' : '❌ Gagal memperbarui profil',
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   void _showChangePasswordDialog(BuildContext context) {
@@ -328,14 +334,21 @@ class _AccountPageState extends State<AccountPage> {
             child: const Text('BATAL'),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Fitur hapus akun akan segera hadir.'),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
+              final authProvider = context.read<AuthProvider>();
+              final success = await authProvider.deleteAccount();
+              if (!context.mounted) return;
+              if (success) {
+                Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(authProvider.error ?? 'Gagal menghapus akun.'),
+                    behavior: SnackBarBehavior.floating,
+                  ),
+                );
+              }
             },
             style: TextButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.error,

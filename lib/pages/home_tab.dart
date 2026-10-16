@@ -81,16 +81,23 @@ class _HomeTabState extends State<HomeTab> {
                   ElevatedButton(
                     onPressed: isCreating ? null : () async {
                       if (groupNameController.text.trim().isEmpty || destinationController.text.trim().isEmpty || selectedVehicleType == null) return;
-                      setModalState(() => isCreating = true);
-                      
                       final authProvider = context.read<AuthProvider>();
+                      final currentUid = authProvider.user?.uid;
+                      if (currentUid == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Sesi login tidak valid. Silakan login kembali.')),
+                        );
+                        return;
+                      }
+
+                      setModalState(() => isCreating = true);
                       final groupProvider = context.read<GroupProvider>();
                       
                       final success = await groupProvider.createGroup(
                         name: groupNameController.text.trim(),
                         type: selectedVehicleType!,
                         destination: destinationController.text.trim(),
-                        hostUid: authProvider.user!.uid,
+                        hostUid: currentUid,
                       );
                       
                       if (!context.mounted) return;
@@ -157,28 +164,36 @@ class _HomeTabState extends State<HomeTab> {
                   const SizedBox(height: 24),
                   CustomTextField(
                     label: 'Kode Undangan',
-                    hint: 'contoh: TRG-42A',
+                    hint: 'contoh: TRG-42A9B1',
                     controller: inviteCodeController,
                   ),
                   const SizedBox(height: 32),
                   ElevatedButton(
                     onPressed: isJoining ? null : () async {
                       if (inviteCodeController.text.trim().isEmpty) return;
-                      setModalState(() => isJoining = true);
-                      
                       final authProvider = context.read<AuthProvider>();
+                      final currentUid = authProvider.user?.uid;
+                      if (currentUid == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Sesi login tidak valid. Silakan login kembali.')),
+                        );
+                        return;
+                      }
+
+                      setModalState(() => isJoining = true);
                       final groupProvider = context.read<GroupProvider>();
                       
                       final success = await groupProvider.joinGroup(
                         inviteCode: inviteCodeController.text.trim(),
-                        uid: authProvider.user!.uid,
+                        uid: currentUid,
                       );
                       
                       if (!context.mounted) return;
                       
                       if (success) {
+                        final isHost = groupProvider.activeGroup?.isHost(currentUid) ?? false;
                         Navigator.pop(context);
-                        Navigator.push(context, MaterialPageRoute(builder: (_) => const MapPage(isHost: false)));
+                        Navigator.push(context, MaterialPageRoute(builder: (_) => MapPage(isHost: isHost)));
                       } else {
                         setModalState(() => isJoining = false);
                         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(groupProvider.error ?? 'Gagal bergabung grup')));
@@ -322,7 +337,7 @@ class _HomeTabState extends State<HomeTab> {
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: AppTheme.primary.withOpacity(0.3),
+                        color: AppTheme.primary.withValues(alpha: 0.3),
                         blurRadius: 16,
                         offset: const Offset(0, 8),
                       ),
@@ -333,7 +348,8 @@ class _HomeTabState extends State<HomeTab> {
                     child: InkWell(
                       borderRadius: BorderRadius.circular(20),
                       onTap: () {
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => const MapPage(isHost: false)));
+                        final isHost = groupProvider.activeGroup?.isHost(authProvider.user?.uid ?? '') ?? false;
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => MapPage(isHost: isHost)));
                       },
                       child: Padding(
                         padding: const EdgeInsets.all(20),
@@ -342,7 +358,7 @@ class _HomeTabState extends State<HomeTab> {
                             Container(
                               padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.2),
+                                color: Colors.white.withValues(alpha: 0.2),
                                 borderRadius: BorderRadius.circular(16),
                               ),
                               child: const Icon(Icons.navigation_rounded, color: Colors.white, size: 28),
@@ -354,7 +370,7 @@ class _HomeTabState extends State<HomeTab> {
                                 children: [
                                   Text(
                                     AppLocalizations.of(context)!.homeActiveTrip,
-                                    style: GoogleFonts.urbanist(color: Colors.white.withOpacity(0.8), fontSize: 13, fontWeight: FontWeight.w600),
+                                    style: GoogleFonts.urbanist(color: Colors.white.withValues(alpha: 0.8), fontSize: 13, fontWeight: FontWeight.w600),
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
@@ -518,7 +534,7 @@ class _HomeTabState extends State<HomeTab> {
                                       Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                                         decoration: BoxDecoration(
-                                          color: trip['role'] == 'Host' ? AppTheme.primary.withOpacity(0.15) : const Color(0xFFF1F1F5),
+                                          color: trip['role'] == 'Host' ? AppTheme.primary.withValues(alpha: 0.15) : const Color(0xFFF1F1F5),
                                           borderRadius: BorderRadius.circular(8),
                                         ),
                                         child: Text(
@@ -584,7 +600,7 @@ class _HomeTabState extends State<HomeTab> {
         border: Border.all(color: isPrimary ? color : const Color(0xFFEDEDF2), width: 1),
         boxShadow: isPrimary ? [
           BoxShadow(
-            color: color.withOpacity(0.2),
+            color: color.withValues(alpha: 0.2),
             blurRadius: 12,
             offset: const Offset(0, 6),
           )
@@ -603,7 +619,7 @@ class _HomeTabState extends State<HomeTab> {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: isPrimary ? Colors.white.withOpacity(0.2) : color.withOpacity(0.1),
+                    color: isPrimary ? Colors.white.withValues(alpha: 0.2) : color.withValues(alpha: 0.1),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Icon(icon, color: isPrimary ? Colors.white : color, size: 28),

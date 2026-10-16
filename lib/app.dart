@@ -18,8 +18,21 @@ class _AuthWrapperState extends State<AuthWrapper> {
   @override
   void initState() {
     super.initState();
-    // Directly set to false to avoid SharedPreferences hanging on broken Android states
-    _hasSeenOnboarding = false;
+    _loadOnboardingState();
+  }
+
+  Future<void> _loadOnboardingState() async {
+    bool seen = false;
+    try {
+      final prefs = await SharedPreferences.getInstance()
+          .timeout(const Duration(seconds: 2));
+      seen = prefs.getBool('hasSeenOnboarding') ?? false;
+    } catch (_) {
+      seen = false;
+    }
+    if (mounted) {
+      setState(() => _hasSeenOnboarding = seen);
+    }
   }
 
   @override

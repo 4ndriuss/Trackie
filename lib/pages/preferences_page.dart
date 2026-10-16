@@ -47,35 +47,41 @@ class _PreferencesPageState extends State<PreferencesPage> {
                   color: theme.colorScheme.secondary.withValues(alpha: 0.2), // ignore: deprecated_member_use
                 ),
               ),
-              child: Column(
-                children: _languages.map((lang) {
-                  final isSelected = localeProvider.locale.languageCode == lang.code;
-                  return RadioListTile<String>(
-                    value: lang.code,
-                    groupValue: localeProvider.locale.languageCode,
-                    onChanged: (value) {
-                      if (value != null) {
-                        localeProvider.setLocale(Locale(value));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(AppLocalizations.of(context)!.languageChanged(lang.name)),
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                      }
-                    },
-                    title: Text(
-                      '${lang.flag}  ${lang.name}',
-                      style: TextStyle(
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+              child: RadioGroup<String>(
+                groupValue: localeProvider.locale.languageCode,
+                onChanged: (value) {
+                  if (value != null) {
+                    final selectedLang = _languages.firstWhere(
+                      (l) => l.code == value,
+                      orElse: () => _languages.first,
+                    );
+                    localeProvider.setLocale(Locale(value));
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(AppLocalizations.of(context)!.languageChanged(selectedLang.name)),
+                        behavior: SnackBarBehavior.floating,
                       ),
-                    ),
-                    activeColor: theme.primaryColor,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  );
-                }).toList(),
+                    );
+                  }
+                },
+                child: Column(
+                  children: _languages.map((lang) {
+                    final isSelected = localeProvider.locale.languageCode == lang.code;
+                    return RadioListTile<String>(
+                      value: lang.code,
+                      title: Text(
+                        '${lang.flag}  ${lang.name}',
+                        style: TextStyle(
+                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                        ),
+                      ),
+                      activeColor: theme.primaryColor,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    );
+                  }).toList(),
+                ),
               ),
             ),
 
@@ -89,87 +95,83 @@ class _PreferencesPageState extends State<PreferencesPage> {
                 color: theme.colorScheme.surface,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: theme.colorScheme.secondary.withValues(alpha: 0.2), // ignore: deprecated_member_use
+                  color: theme.colorScheme.secondary.withValues(alpha: 0.2),
                 ),
               ),
               child: ValueListenableBuilder<ThemeMode>(
                 valueListenable: themeNotifier,
                 builder: (context, currentMode, child) {
-                  return Column(
-                    children: [
-                      // Light Mode
-                      RadioListTile<ThemeMode>(
-                        value: ThemeMode.light,
-                        groupValue: currentMode,
-                        onChanged: (value) {
-                          themeNotifier.value = value!;
-                        },
-                        title: Row(
-                          children: [
-                            const Icon(Icons.light_mode, size: 20),
-                            const SizedBox(width: AppSpacing.sm),
-                            Text(AppLocalizations.of(context)!.lightMode),
-                          ],
+                  return RadioGroup<ThemeMode>(
+                    groupValue: currentMode,
+                    onChanged: (value) {
+                      if (value != null) {
+                        themeNotifier.value = value;
+                      }
+                    },
+                    child: Column(
+                      children: [
+                        // Light Mode
+                        RadioListTile<ThemeMode>(
+                          value: ThemeMode.light,
+                          title: Row(
+                            children: [
+                              const Icon(Icons.light_mode, size: 20),
+                              const SizedBox(width: AppSpacing.sm),
+                              Text(AppLocalizations.of(context)!.lightMode),
+                            ],
+                          ),
+                          subtitle: Text(AppLocalizations.of(context)!.lightModeDesc),
+                          activeColor: theme.primaryColor,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
-                        subtitle: Text(AppLocalizations.of(context)!.lightModeDesc),
-                        activeColor: theme.primaryColor,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                        Divider(
+                          height: 1,
+                          indent: AppSpacing.md,
+                          endIndent: AppSpacing.md,
+                          color: theme.colorScheme.secondary.withValues(alpha: 0.15),
                         ),
-                      ),
-                      Divider(
-                        height: 1,
-                        indent: AppSpacing.md,
-                        endIndent: AppSpacing.md,
-                        color: theme.colorScheme.secondary.withValues(alpha: 0.15), // ignore: deprecated_member_use
-                      ),
-                      // Dark Mode
-                      RadioListTile<ThemeMode>(
-                        value: ThemeMode.dark,
-                        groupValue: currentMode,
-                        onChanged: (value) {
-                          themeNotifier.value = value!;
-                        },
-                        title: Row(
-                          children: [
-                            const Icon(Icons.dark_mode, size: 20),
-                            const SizedBox(width: AppSpacing.sm),
-                            Text(AppLocalizations.of(context)!.darkMode),
-                          ],
+                        // Dark Mode
+                        RadioListTile<ThemeMode>(
+                          value: ThemeMode.dark,
+                          title: Row(
+                            children: [
+                              const Icon(Icons.dark_mode, size: 20),
+                              const SizedBox(width: AppSpacing.sm),
+                              Text(AppLocalizations.of(context)!.darkMode),
+                            ],
+                          ),
+                          subtitle: Text(AppLocalizations.of(context)!.darkModeDesc),
+                          activeColor: theme.primaryColor,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
-                        subtitle: Text(AppLocalizations.of(context)!.darkModeDesc),
-                        activeColor: theme.primaryColor,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                        Divider(
+                          height: 1,
+                          indent: AppSpacing.md,
+                          endIndent: AppSpacing.md,
+                          color: theme.colorScheme.secondary.withValues(alpha: 0.15),
                         ),
-                      ),
-                      Divider(
-                        height: 1,
-                        indent: AppSpacing.md,
-                        endIndent: AppSpacing.md,
-                        color: theme.colorScheme.secondary.withValues(alpha: 0.15), // ignore: deprecated_member_use
-                      ),
-                      // System Default
-                      RadioListTile<ThemeMode>(
-                        value: ThemeMode.system,
-                        groupValue: currentMode,
-                        onChanged: (value) {
-                          themeNotifier.value = value!;
-                        },
-                        title: Row(
-                          children: [
-                            const Icon(Icons.settings_brightness, size: 20),
-                            const SizedBox(width: AppSpacing.sm),
-                            Text(AppLocalizations.of(context)!.systemMode),
-                          ],
+                        // System Default
+                        RadioListTile<ThemeMode>(
+                          value: ThemeMode.system,
+                          title: Row(
+                            children: [
+                              const Icon(Icons.settings_brightness, size: 20),
+                              const SizedBox(width: AppSpacing.sm),
+                              Text(AppLocalizations.of(context)!.systemMode),
+                            ],
+                          ),
+                          subtitle: Text(AppLocalizations.of(context)!.systemModeDesc),
+                          activeColor: theme.primaryColor,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
-                        subtitle: Text(AppLocalizations.of(context)!.systemModeDesc),
-                        activeColor: theme.primaryColor,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ],
+                      ],
+                    ),
                   );
                 },
               ),

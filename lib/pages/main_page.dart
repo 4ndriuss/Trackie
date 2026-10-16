@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
+import '../providers/auth_provider.dart';
+import '../providers/group_provider.dart';
 import '../theme/app_theme.dart';
 import 'home_tab.dart';
 import 'history_tab.dart';
@@ -14,13 +17,25 @@ class MainPage extends StatefulWidget {
 }
 
 class _MainPageState extends State<MainPage> {
-  int _selectedIndex = 1; // Default to History since we are working on it, or 0 for Home. Let's use 1.
+  int _selectedIndex = 0;
 
   final List<Widget> _tabs = [
     const HomeTab(),
     const HistoryTab(),
     const ProfileTab(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final uid = context.read<AuthProvider>().user?.uid;
+      if (uid != null) {
+        context.read<GroupProvider>().loadActiveGroup(uid);
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,7 +46,7 @@ class _MainPageState extends State<MainPage> {
           color: Colors.white,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, -5),
             ),

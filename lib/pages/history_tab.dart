@@ -183,7 +183,7 @@ class HistoryTab extends StatelessWidget {
                                     padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                                     decoration: BoxDecoration(
                                       color: trip.role == 'Host' 
-                                          ? AppTheme.primary.withOpacity(0.15) 
+                                          ? AppTheme.primary.withValues(alpha: 0.15) 
                                           : const Color(0xFFF1F1F5),
                                       borderRadius: BorderRadius.circular(12),
                                     ),

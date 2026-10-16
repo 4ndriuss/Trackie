@@ -26,7 +26,7 @@ class PrimaryButton extends StatelessWidget {
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            AppTheme.primary.withOpacity(0.8),
+            AppTheme.primary.withValues(alpha: 0.8),
             AppTheme.primary,
           ],
         ),

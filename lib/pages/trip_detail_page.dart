@@ -30,15 +30,17 @@ class _TripDetailPageState extends State<TripDetailPage> {
   String _buildShareText() {
     final trip = widget.trip;
     final dateStr = '${trip.date.day}/${trip.date.month}/${trip.date.year}';
+    final routeInfo = trip.routePoints.isNotEmpty
+        ? '\n🗺️ Rute dimulai dari (${trip.routePoints.first.latitude.toStringAsFixed(4)}, '
+            '${trip.routePoints.first.longitude.toStringAsFixed(4)}) '
+            'hingga (${trip.routePoints.last.latitude.toStringAsFixed(4)}, '
+            '${trip.routePoints.last.longitude.toStringAsFixed(4)})\n'
+        : '';
     return '🏍️ *${trip.groupName} - ${trip.destination}*\n'
         '📅 $dateStr\n'
         '📏 Jarak: ${trip.distanceKm} km\n'
         '⏱️ Durasi: ${trip.duration}\n'
-        '\n'
-        '🗺️ Rute dimulai dari (${trip.routePoints.first.latitude.toStringAsFixed(4)}, '
-        '${trip.routePoints.first.longitude.toStringAsFixed(4)}) '
-        'hingga (${trip.routePoints.last.latitude.toStringAsFixed(4)}, '
-        '${trip.routePoints.last.longitude.toStringAsFixed(4)})\n'
+        '$routeInfo'
         '\n'
         '— Dibagikan dari Trackie 🏁';
   }
@@ -413,20 +415,21 @@ class _TripDetailPageState extends State<TripDetailPage> {
               ),
               Expanded(
                 flex: 1,
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(AppSpacing.lg),
-                  decoration: BoxDecoration(
-                    color: theme.colorScheme.surface,
-                    boxShadow: [
-                      BoxShadow(
-                        // ignore: deprecated_member_use
-                        color: Colors.black.withValues(alpha: 0.05),
-                        offset: const Offset(0, -4),
-                        blurRadius: 10,
-                      ),
-                    ],
-                  ),
+                child: RepaintBoundary(
+                  key: _shareCardKey,
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(AppSpacing.lg),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surface,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.05),
+                          offset: const Offset(0, -4),
+                          blurRadius: 10,
+                        ),
+                      ],
+                    ),
                   child: SingleChildScrollView(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -552,6 +555,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
                       ],
                     ),
                   ),
+                ),
                 ),
               ),
             ],

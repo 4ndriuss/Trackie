@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
@@ -8,7 +7,6 @@ import 'package:intl/intl.dart';
 
 import '../theme/app_theme.dart';
 import '../providers/auth_provider.dart';
-import '../l10n/app_localizations.dart';
 import 'privacy_policy_page.dart';
 import 'preferences_page.dart';
 import 'account_page.dart';
@@ -50,19 +48,26 @@ class _ProfileTabState extends State<ProfileTab> {
   }
 
   Future<void> _handleEditAvatar() async {
+    final authProvider = context.read<AuthProvider>();
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
     
     if (pickedFile != null && mounted) {
       final bytes = await pickedFile.readAsBytes();
+      if (!mounted) return;
       final ext = pickedFile.name.split('.').last;
       
-      final authProvider = context.read<AuthProvider>();
-      await authProvider.updateProfilePicture(bytes, ext);
+      final success = await authProvider.updateProfilePicture(bytes, ext);
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Profile picture updated successfully!')),
+          SnackBar(
+            content: Text(
+              success
+                  ? 'Profile picture updated successfully!'
+                  : (authProvider.error ?? 'Failed to update profile picture (max 5MB, JPG/PNG/WebP).'),
+            ),
+          ),
         );
       }
     }
@@ -138,7 +143,7 @@ class _ProfileTabState extends State<ProfileTab> {
                       children: [
                         CircleAvatar(
                           radius: 50,
-                          backgroundColor: AppTheme.primary.withOpacity(0.2), // Adapted from lime green to Trackie Orange
+                          backgroundColor: AppTheme.primary.withValues(alpha: 0.2), // Adapted from lime green to Trackie Orange
                           backgroundImage: (user?.photoUrl != null && user!.photoUrl!.isNotEmpty)
                               ? CachedNetworkImageProvider(user.photoUrl!)
                               : null,
@@ -344,7 +349,7 @@ class StreakBanner extends StatelessWidget {
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-              color: AppTheme.primary.withOpacity(0.2), // Adapted to Trackie theme
+              color: AppTheme.primary.withValues(alpha: 0.2), // Adapted to Trackie theme
               borderRadius: BorderRadius.circular(16),
             ),
             child: Icon(Icons.local_fire_department, color: AppTheme.primary, size: 32),

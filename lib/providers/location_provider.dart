@@ -61,13 +61,22 @@ class LocationProvider extends ChangeNotifier {
       notifyListeners();
     });
 
-    // 2. Mulai background tracking (Foreground Service)
-    await BackgroundLocationService.startTracking(
-      groupId: groupId,
-      uid: uid,
-      userName: userName,
-      tripName: tripName,
-    );
+    // 2. Broadcast posisi awal segera agar muncul di peta tanpa menunggu 5 detik
+    unawaited(broadcastLocation(groupId: groupId, uid: uid, name: userName));
+
+    // 3. Mulai background tracking (Foreground Service) untuk Android/iOS
+    if (!kIsWeb) {
+      try {
+        await BackgroundLocationService.startTracking(
+          groupId: groupId,
+          uid: uid,
+          userName: userName,
+          tripName: tripName,
+        );
+      } catch (e) {
+        debugPrint('Error starting background service: $e');
+      }
+    }
 
     notifyListeners();
   }
@@ -87,7 +96,13 @@ class LocationProvider extends ChangeNotifier {
     }
 
     // Stop background service
-    await BackgroundLocationService.stopTracking();
+    if (!kIsWeb) {
+      try {
+        await BackgroundLocationService.stopTracking();
+      } catch (e) {
+        debugPrint('Error stopping background service: $e');
+      }
+    }
 
     // Stop stream listener
     stopListening();
@@ -125,24 +140,30 @@ class LocationProvider extends ChangeNotifier {
     }
   }
 
-  /// Aktifkan sinyal SOS.
+  /// Aktifkan sinyal SOS dan sinkronkan dengan background service.
   Future<void> triggerSOS({
     required String groupId,
     required String uid,
   }) async {
     try {
+      if (!kIsWeb) {
+        BackgroundLocationService.setStatus('sos');
+      }
       await _locationService.triggerSOS(groupId: groupId, uid: uid);
     } catch (e) {
       debugPrint('Error triggering SOS: $e');
     }
   }
 
-  /// Batalkan sinyal SOS.
+  /// Batalkan sinyal SOS dan kembalikan status ke online.
   Future<void> cancelSOS({
     required String groupId,
     required String uid,
   }) async {
     try {
+      if (!kIsWeb) {
+        BackgroundLocationService.setStatus('online');
+      }
       await _locationService.cancelSOS(groupId: groupId, uid: uid);
     } catch (e) {
       debugPrint('Error canceling SOS: $e');

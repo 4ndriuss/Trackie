@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
-import '../theme/app_colors.dart';
 import '../theme/app_theme.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/custom_textfield.dart';
@@ -65,9 +64,69 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  void _showForgotPasswordDialog() {
+  Future<void> _handleGoogleLogin() async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+
+    final authProvider = context.read<AuthProvider>();
+    final success = await authProvider.loginWithGoogle();
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (success) {
+      await showSuccessDialog(
+        context,
+        title: 'Welcome Back!',
+        message: 'You have logged in successfully with Google.',
+        buttonText: 'Continue',
+        onPressed: () {
+          Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+        },
+      );
+    } else if (authProvider.error != null) {
+      await showErrorDialog(
+        context,
+        title: 'Google Login Failed',
+        message: authProvider.error!,
+        buttonText: 'Try Again',
+      );
+    }
+  }
+
+  Future<void> _handleFacebookLogin() async {
+    if (_isLoading) return;
+    setState(() => _isLoading = true);
+
+    final authProvider = context.read<AuthProvider>();
+    final success = await authProvider.loginWithFacebook();
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (success) {
+      await showSuccessDialog(
+        context,
+        title: 'Welcome Back!',
+        message: 'You have logged in successfully with Facebook.',
+        buttonText: 'Continue',
+        onPressed: () {
+          Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+        },
+      );
+    } else if (authProvider.error != null) {
+      await showErrorDialog(
+        context,
+        title: 'Facebook Login Failed',
+        message: authProvider.error!,
+        buttonText: 'Try Again',
+      );
+    }
+  }
+
+  Future<void> _showForgotPasswordDialog() async {
     final emailController = TextEditingController();
-    showDialog(
+    final email = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text('Reset Password', style: GoogleFonts.urbanist(fontWeight: FontWeight.bold)),
@@ -93,41 +152,40 @@ class _LoginPageState extends State<LoginPage> {
             child: Text('Cancel', style: GoogleFonts.urbanist(color: Colors.grey)),
           ),
           ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(ctx);
-              final email = emailController.text.trim();
-              if (email.isNotEmpty) {
-                setState(() => _isLoading = true);
-                final authProvider = context.read<AuthProvider>();
-                final success = await authProvider.resetPassword(email);
-                
-                if (!mounted) return;
-                setState(() => _isLoading = false);
-                
-                if (success) {
-                  await showSuccessDialog(
-                    context,
-                    title: 'Email Sent',
-                    message: 'A password reset link has been sent to $email.',
-                    buttonText: 'OK',
-                    onPressed: () => Navigator.of(context).pop(),
-                  );
-                } else {
-                  await showErrorDialog(
-                    context,
-                    title: 'Reset Failed',
-                    message: authProvider.error ?? 'Failed to send reset email.',
-                    buttonText: 'Try Again',
-                  );
-                }
-              }
-            },
+            onPressed: () => Navigator.pop(ctx, emailController.text.trim()),
             style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primary),
             child: Text('Send Link', style: GoogleFonts.urbanist(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
     );
+    emailController.dispose();
+
+    if (!mounted || email == null || email.isEmpty) return;
+
+    setState(() => _isLoading = true);
+    final authProvider = context.read<AuthProvider>();
+    final success = await authProvider.resetPassword(email);
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (success) {
+      await showSuccessDialog(
+        context,
+        title: 'Email Sent',
+        message: 'A password reset link has been sent to $email.',
+        buttonText: 'OK',
+        onPressed: () => Navigator.of(context).pop(),
+      );
+    } else {
+      await showErrorDialog(
+        context,
+        title: 'Reset Failed',
+        message: authProvider.error ?? 'Failed to send reset email.',
+        buttonText: 'Try Again',
+      );
+    }
   }
 
   @override
@@ -262,47 +320,13 @@ class _LoginPageState extends State<LoginPage> {
                       SocialButton(
                         text: 'Continue with Google',
                         icon: const Icon(Icons.g_mobiledata, color: Colors.blue, size: 28),
-                        onPressed: () async {
-                          // HARDCODED UNTUK PROTOTYPE
-                          setState(() => _isLoading = true);
-                          await Future.delayed(const Duration(seconds: 1, milliseconds: 500));
-                          
-                          if (!mounted) return;
-                          setState(() => _isLoading = false);
-                          
-                          await showSuccessDialog(
-                            context,
-                            title: 'Welcome Back!',
-                            message: 'You have logged in successfully with Google (Prototype).',
-                            buttonText: 'Continue',
-                            onPressed: () {
-                              Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
-                            },
-                          );
-                        },
+                        onPressed: _handleGoogleLogin,
                       ),
                       const SizedBox(height: 16),
                       SocialButton(
                         text: 'Continue with Facebook',
                         icon: const Icon(Icons.facebook, color: Colors.blueAccent, size: 24),
-                        onPressed: () async {
-                          // HARDCODED UNTUK PROTOTYPE
-                          setState(() => _isLoading = true);
-                          await Future.delayed(const Duration(seconds: 1, milliseconds: 500));
-                          
-                          if (!mounted) return;
-                          setState(() => _isLoading = false);
-                          
-                          await showSuccessDialog(
-                            context,
-                            title: 'Welcome Back!',
-                            message: 'You have logged in successfully with Facebook (Prototype).',
-                            buttonText: 'Continue',
-                            onPressed: () {
-                              Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
-                            },
-                          );
-                        },
+                        onPressed: _handleFacebookLogin,
                       ),
                       const SizedBox(height: 24),
                     ],

@@ -10,7 +10,10 @@ import 'package:provider/provider.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import '../theme/app_theme.dart';
+import '../providers/auth_provider.dart';
 import '../providers/group_provider.dart';
+import '../providers/location_provider.dart';
+import '../services/haversine_utils.dart';
 
 /// Status anggota grup, menentukan warna indikator dan opasitas marker.
 enum MemberStatus { online, offline, sos }
@@ -59,9 +62,8 @@ class _MapPageState extends State<MapPage> {
     zoom: 14.4746,
   );
 
-  // Data mockup anggota grup
-  // TODO: ganti dengan data dari backend / stream lokasi
-  final List<GroupMember> _members = [
+  // Data fallback saat stream lokasi RTDB belum mengembalikan data
+  final List<GroupMember> _fallbackMembers = [
     const GroupMember(
       id: 'anda', name: 'Anda', status: MemberStatus.online,
       position: LatLng(-6.200000, 106.816666), distanceMeters: 0,
@@ -79,9 +81,88 @@ class _MapPageState extends State<MapPage> {
   // Controller untuk memanipulasi Google Maps (misal: menggeser kamera)
   final _mapController = Completer<GoogleMapController>();
 
-  /// Mengubah list [_members] menjadi kumpulan [Marker] untuk ditampilkan di peta.
-  Set<Marker> get _markers => {
-        for (final m in _members)
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _initRealTimeTracking();
+    });
+  }
+
+  Future<void> _initRealTimeTracking() async {
+    if (!mounted) return;
+    final authProvider = context.read<AuthProvider>();
+    final groupProvider = context.read<GroupProvider>();
+    final locationProvider = context.read<LocationProvider>();
+
+    final activeGroup = groupProvider.activeGroup;
+    final currentUser = authProvider.user;
+    if (activeGroup == null || currentUser == null) return;
+
+    final granted = await locationProvider.requestPermissions();
+    if (!mounted || !granted) return;
+
+    final displayName = authProvider.userProfile?.name ??
+        currentUser.displayName ??
+        'Anda';
+
+    await locationProvider.startTracking(
+      groupId: activeGroup.id,
+      uid: currentUser.uid,
+      userName: displayName,
+      tripName: activeGroup.name,
+    );
+  }
+
+  List<GroupMember> _resolveMembers(
+    LocationProvider locationProvider,
+    String? currentUid,
+  ) {
+    final rtdbMembers = locationProvider.members;
+    if (rtdbMembers.isEmpty) {
+      return _fallbackMembers;
+    }
+
+    double? myLat = locationProvider.currentPosition?.latitude;
+    double? myLng = locationProvider.currentPosition?.longitude;
+
+    if (currentUid != null) {
+      for (final m in rtdbMembers) {
+        if (m.uid == currentUid) {
+          myLat = m.lat;
+          myLng = m.lng;
+          break;
+        }
+      }
+    }
+
+    return rtdbMembers.map((loc) {
+      final MemberStatus status;
+      if (loc.isSos) {
+        status = MemberStatus.sos;
+      } else if (loc.isOffline) {
+        status = MemberStatus.offline;
+      } else {
+        status = MemberStatus.online;
+      }
+
+      final double distance = (myLat != null && myLng != null && loc.uid != currentUid)
+          ? HaversineUtils.distanceInMeters(myLat, myLng, loc.lat, loc.lng)
+          : 0.0;
+
+      return GroupMember(
+        id: loc.uid,
+        name: loc.uid == currentUid ? '${loc.name} (Anda)' : loc.name,
+        status: status,
+        position: LatLng(loc.lat, loc.lng),
+        distanceMeters: distance,
+      );
+    }).toList();
+  }
+
+  /// Mengubah list [members] menjadi kumpulan [Marker] untuk ditampilkan di peta.
+  Set<Marker> _buildMarkers(List<GroupMember> members) => {
+        for (final m in members)
           Marker(
             markerId: MarkerId(m.id),
             position: m.position,
@@ -176,8 +257,21 @@ class _MapPageState extends State<MapPage> {
       ),
     );
     if (leave == true && mounted) {
-      // TODO: panggil API keluar grup dan hentikan tracking
-      Navigator.pop(context);
+      final authProvider = context.read<AuthProvider>();
+      final groupProvider = context.read<GroupProvider>();
+      final locationProvider = context.read<LocationProvider>();
+
+      final groupId = groupProvider.activeGroup?.id;
+      final uid = authProvider.user?.uid;
+
+      await locationProvider.stopTracking(groupId: groupId, uid: uid);
+      if (uid != null && groupId != null) {
+        await groupProvider.leaveGroup(uid: uid);
+      }
+
+      if (mounted) {
+        Navigator.pop(context);
+      }
     }
   }
 
@@ -208,12 +302,23 @@ class _MapPageState extends State<MapPage> {
     );
 
     if (confirm == true && mounted) {
+      final authProvider = context.read<AuthProvider>();
+      final groupProvider = context.read<GroupProvider>();
+      final locationProvider = context.read<LocationProvider>();
+
+      final groupId = groupProvider.activeGroup?.id;
+      final uid = authProvider.user?.uid;
+
+      if (groupId != null && uid != null) {
+        await locationProvider.triggerSOS(groupId: groupId, uid: uid);
+      }
+
       setState(() {
-        // Simulasi: Mengubah status 'Anda' menjadi SOS
-        final index = _members.indexWhere((m) => m.id == 'anda');
+        // Fallback update untuk mode offline/simulasi
+        final index = _fallbackMembers.indexWhere((m) => m.id == 'anda');
         if (index != -1) {
-          final me = _members[index];
-          _members[index] = GroupMember(
+          final me = _fallbackMembers[index];
+          _fallbackMembers[index] = GroupMember(
             id: me.id,
             name: me.name,
             status: MemberStatus.sos,
@@ -222,13 +327,15 @@ class _MapPageState extends State<MapPage> {
           );
         }
       });
-      // TODO: Panggil API Backend untuk membunyikan sirine di semua HP
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('🚨 Sinyal DARURAT telah dikirim ke rombongan!'),
-          backgroundColor: Colors.red,
-        ),
-      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🚨 Sinyal DARURAT telah dikirim ke rombongan!'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -236,6 +343,9 @@ class _MapPageState extends State<MapPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final bottomInset = MediaQuery.paddingOf(context).bottom;
+    final authProvider = context.watch<AuthProvider>();
+    final locationProvider = context.watch<LocationProvider>();
+    final members = _resolveMembers(locationProvider, authProvider.user?.uid);
 
     return Scaffold(
       appBar: AppBar(
@@ -257,7 +367,7 @@ class _MapPageState extends State<MapPage> {
               // Lapisan Peta
               GoogleMap(
                 initialCameraPosition: _initialPosition,
-                markers: _markers,
+                markers: _buildMarkers(members),
                 // Memberikan padding bawah agar logo Google tidak tertutup oleh panel bottom sheet
                 padding: EdgeInsets.only(bottom: constraints.maxHeight * 0.3),
                 onMapCreated: (c) {
@@ -319,7 +429,7 @@ class _MapPageState extends State<MapPage> {
                                 children: [
                                   Expanded(
                                     child: Text(
-                                      'Anggota Grup (${_members.length})',
+                                      'Anggota Grup (${members.length})',
                                       style: theme.textTheme.titleMedium?.copyWith(
                                         fontWeight: FontWeight.bold,
                                       ),
@@ -342,9 +452,9 @@ class _MapPageState extends State<MapPage> {
                       ),
                       // Daftar anggota grup
                       SliverList.builder(
-                        itemCount: _members.length,
+                        itemCount: members.length,
                         itemBuilder: (_, i) {
-                          final m = _members[i];
+                          final m = members[i];
                           return ListTile(
                             onTap: () => _focusOn(m), // Geser kamera saat anggota ditekan
                             tileColor: m.isSos ? theme.colorScheme.error.withValues(alpha: 0.1) : null, // ignore: deprecated_member_use

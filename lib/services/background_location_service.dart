@@ -11,6 +11,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_database/firebase_database.dart';
+import '../firebase_options.dart';
 
 /// [BackgroundLocationService] mengelola lifecycle background tracking.
 /// Saat tracking dimulai, service ini:
@@ -81,6 +82,13 @@ class BackgroundLocationService {
     });
   }
 
+  /// Perbarui status anggota di background isolate (misal: 'sos' atau 'online')
+  /// agar ping periodik tidak menimpa status SOS.
+  static void setStatus(String status) {
+    final service = FlutterBackgroundService();
+    service.invoke('setStatus', {'status': status});
+  }
+
   /// Hentikan background tracking.
   /// Panggil saat user keluar dari grup.
   static Future<void> stopTracking() async {
@@ -108,23 +116,35 @@ Future<void> _onStart(ServiceInstance service) async {
 
   // Inisialisasi Firebase di background isolate
   try {
-    await Firebase.initializeApp(); // On Android, google-services.json usually handles this automatically
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
   } catch (e) {
     debugPrint('Firebase already initialized or error: $e');
   }
-  
+
   final rtdb = FirebaseDatabase.instance;
 
   String? groupId;
   String? uid;
   String? userName;
+  String currentStatus = 'online';
   Timer? locationTimer;
+
+  // Listen perubahan status (misal: SOS)
+  service.on('setStatus').listen((event) {
+    final newStatus = event?['status'] as String?;
+    if (newStatus != null && newStatus.isNotEmpty) {
+      currentStatus = newStatus;
+    }
+  });
 
   // Listen perintah dari main isolate
   service.on('startTracking').listen((event) {
     groupId = event?['groupId'];
     uid = event?['uid'];
     userName = event?['userName'];
+    currentStatus = 'online';
     final tripName = event?['tripName'] ?? 'Perjalanan';
 
     // Update notifikasi
@@ -148,13 +168,14 @@ Future<void> _onStart(ServiceInstance service) async {
           ),
         );
 
-        // Kirim ke Firebase Realtime Database
+        // Kirim ke Firebase Realtime Database dengan mempertahankan currentStatus
         await rtdb.ref('active_locations/$groupId/$uid').set({
+          'uid': uid,
           'name': userName,
           'lat': position.latitude,
           'lng': position.longitude,
           'timestamp': ServerValue.timestamp,
-          'status': 'online',
+          'status': currentStatus,
         });
       } catch (e) {
         debugPrint('Background location error: $e');
@@ -163,16 +184,20 @@ Future<void> _onStart(ServiceInstance service) async {
   });
 
   // Listen perintah stop
-  service.on('stopTracking').listen((event) {
+  service.on('stopTracking').listen((event) async {
     locationTimer?.cancel();
     locationTimer = null;
 
     // Set status offline sebelum stop
     if (groupId != null && uid != null) {
-      rtdb.ref('active_locations/$groupId/$uid').update({
-        'status': 'offline',
-        'timestamp': ServerValue.timestamp,
-      });
+      try {
+        await rtdb.ref('active_locations/$groupId/$uid').update({
+          'status': 'offline',
+          'timestamp': ServerValue.timestamp,
+        });
+      } catch (e) {
+        debugPrint('Failed to update offline status in background: $e');
+      }
     }
 
     service.stopSelf();

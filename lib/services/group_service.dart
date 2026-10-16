@@ -11,14 +11,31 @@ class GroupService {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseDatabase _rtdb = FirebaseDatabase.instance;
 
-  /// Membuat kode undangan unik dengan format TRG-XXX.
+  /// Membuat kode undangan unik secara kriptografis dengan format TRG-XXXXXX.
   String _generateInviteCode() {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    final random = Random();
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    final random = Random.secure();
     final code = String.fromCharCodes(
-      Iterable.generate(3, (_) => chars.codeUnitAt(random.nextInt(chars.length))),
+      Iterable.generate(6, (_) => chars.codeUnitAt(random.nextInt(chars.length))),
     );
     return 'TRG-$code';
+  }
+
+  /// Menghasilkan kode undangan yang dijamin belum dipakai oleh grup aktif lain.
+  Future<String> _generateUniqueInviteCode() async {
+    for (int attempt = 0; attempt < 5; attempt++) {
+      final candidate = _generateInviteCode();
+      final existing = await _firestore
+          .collection('groups')
+          .where('inviteCode', isEqualTo: candidate)
+          .where('status', isEqualTo: 'active')
+          .limit(1)
+          .get();
+      if (existing.docs.isEmpty) {
+        return candidate;
+      }
+    }
+    return _generateInviteCode();
   }
 
   /// Membuat grup baru dan mengembalikan [GroupModel].
@@ -29,13 +46,13 @@ class GroupService {
     required String hostUid,
   }) async {
     final docRef = _firestore.collection('groups').doc();
-    final inviteCode = _generateInviteCode();
+    final inviteCode = await _generateUniqueInviteCode();
 
     final group = GroupModel(
       id: docRef.id,
-      name: name,
-      type: type,
-      destination: destination,
+      name: name.trim(),
+      type: type.trim().toLowerCase(),
+      destination: destination.trim(),
       inviteCode: inviteCode,
       hostUid: hostUid,
       memberUids: [hostUid],
@@ -53,9 +70,12 @@ class GroupService {
     required String inviteCode,
     required String uid,
   }) async {
+    final normalizedCode = inviteCode.trim().toUpperCase();
+    if (normalizedCode.isEmpty) return null;
+
     final querySnapshot = await _firestore
         .collection('groups')
-        .where('inviteCode', isEqualTo: inviteCode.toUpperCase())
+        .where('inviteCode', isEqualTo: normalizedCode)
         .where('status', isEqualTo: 'active')
         .limit(1)
         .get();
@@ -78,6 +98,7 @@ class GroupService {
   }
 
   /// Keluar dari grup. Jika anggota terakhir, grup otomatis diakhiri.
+  /// Jika host keluar tetapi masih ada anggota lain, kepemilikan grup dialihkan.
   Future<void> leaveGroup({
     required String groupId,
     required String uid,
@@ -87,14 +108,19 @@ class GroupService {
 
     if (doc.exists) {
       final group = GroupModel.fromFirestore(doc);
+      final remainingMembers = group.memberUids.where((m) => m != uid).toList();
 
-      if (group.memberUids.length <= 1) {
+      if (remainingMembers.isEmpty) {
         // Anggota terakhir keluar, akhiri grup
         await endGroup(groupId);
       } else {
-        await docRef.update({
+        final updates = <String, dynamic>{
           'memberUids': FieldValue.arrayRemove([uid]),
-        });
+        };
+        if (group.hostUid == uid) {
+          updates['hostUid'] = remainingMembers.first;
+        }
+        await docRef.update(updates);
         // Hapus data lokasi user dari RTDB
         await _rtdb.ref('active_locations/$groupId/$uid').remove();
       }
