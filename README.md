@@ -154,14 +154,18 @@ lib/
 1. **Prerequisites**:
    - Flutter SDK (`^3.13.3`)
    - Android Studio / VS Code
-   - Firebase configuration (`google-services.json` for Android / `GoogleService-Info.plist` for iOS) & Google Maps API Key.
+   - Firebase project configuration & Google Maps API Key.
 
 2. **Install Dependencies**:
    ```bash
    flutter pub get
    ```
 
-3. **Run the Application**:
+3. **Configure Firebase & Google Maps**:
+   - Run `flutterfire configure` to generate `lib/firebase_options.dart` and `android/app/google-services.json` (or copy `lib/firebase_options.example.dart` to `lib/firebase_options.dart` and fill in your credentials).
+   - Replace `API_KEY_ANDA_DISINI` in `android/app/src/main/AndroidManifest.xml` with your Google Maps SDK API Key.
+
+4. **Run the Application**:
    ```bash
    flutter run
    ```
