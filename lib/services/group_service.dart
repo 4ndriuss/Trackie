@@ -1,15 +1,14 @@
 // File: group_service.dart
-// Service untuk mengelola grup/perjalanan: membuat, bergabung, keluar, dan mengakhiri.
+// Service untuk mengelola grup/perjalanan menggunakan database Supabase (PostgreSQL).
 import 'dart:math';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_database/firebase_database.dart';
+import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/group_model.dart';
+import '../supabase_config.dart';
 
-/// [GroupService] menyediakan operasi CRUD untuk koleksi 'groups' di Firestore
-/// dan pembersihan data lokasi di Realtime Database.
+/// [GroupService] menyediakan operasi CRUD untuk tabel 'groups' di Supabase.
 class GroupService {
-  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
-  final FirebaseDatabase _rtdb = FirebaseDatabase.instance;
+  SupabaseClient get _supabase => SupabaseConfig.client;
 
   /// Membuat kode undangan unik secara kriptografis dengan format TRG-XXXXXX.
   String _generateInviteCode() {
@@ -21,50 +20,40 @@ class GroupService {
     return 'TRG-$code';
   }
 
-  /// Menghasilkan kode undangan yang dijamin belum dipakai oleh grup aktif lain.
-  Future<String> _generateUniqueInviteCode() async {
-    for (int attempt = 0; attempt < 5; attempt++) {
-      final candidate = _generateInviteCode();
-      final existing = await _firestore
-          .collection('groups')
-          .where('inviteCode', isEqualTo: candidate)
-          .where('status', isEqualTo: 'active')
-          .limit(1)
-          .get();
-      if (existing.docs.isEmpty) {
-        return candidate;
-      }
-    }
-    return _generateInviteCode();
-  }
-
   /// Membuat grup baru dan mengembalikan [GroupModel].
+  /// Keunikan kode undangan dijamin oleh constraint UNIQUE di database;
+  /// jika terjadi bentrok (sangat jarang), coba lagi dengan kode baru.
   Future<GroupModel> createGroup({
     required String name,
     required String type,
     required String destination,
     required String hostUid,
   }) async {
-    final docRef = _firestore.collection('groups').doc();
-    final inviteCode = await _generateUniqueInviteCode();
+    PostgrestException? lastError;
+    for (int attempt = 0; attempt < 5; attempt++) {
+      try {
+        final data = await _supabase.from('groups').insert({
+          'name': name.trim(),
+          'type': type.trim().toLowerCase(),
+          'destination': destination.trim(),
+          'invite_code': _generateInviteCode(),
+          'host_uid': hostUid,
+          'member_uids': [hostUid],
+          'status': 'active',
+        }).select().single();
 
-    final group = GroupModel(
-      id: docRef.id,
-      name: name.trim(),
-      type: type.trim().toLowerCase(),
-      destination: destination.trim(),
-      inviteCode: inviteCode,
-      hostUid: hostUid,
-      memberUids: [hostUid],
-      status: 'active',
-      createdAt: DateTime.now(),
-    );
-
-    await docRef.set(group.toFirestore());
-    return group;
+        return GroupModel.fromMap(data);
+      } on PostgrestException catch (e) {
+        // 23505 = unique_violation (kode undangan sudah dipakai)
+        if (e.code != '23505') rethrow;
+        lastError = e;
+      }
+    }
+    throw lastError!;
   }
 
   /// Bergabung ke grup yang sudah ada menggunakan kode undangan.
+  /// Dilakukan via RPC `join_group` (atomik & divalidasi di server).
   /// Mengembalikan [GroupModel] jika berhasil, null jika kode tidak ditemukan.
   Future<GroupModel?> joinGroup({
     required String inviteCode,
@@ -73,104 +62,76 @@ class GroupService {
     final normalizedCode = inviteCode.trim().toUpperCase();
     if (normalizedCode.isEmpty) return null;
 
-    final querySnapshot = await _firestore
-        .collection('groups')
-        .where('inviteCode', isEqualTo: normalizedCode)
-        .where('status', isEqualTo: 'active')
-        .limit(1)
-        .get();
-
-    if (querySnapshot.docs.isEmpty) return null;
-
-    final doc = querySnapshot.docs.first;
-    final group = GroupModel.fromFirestore(doc);
-
-    if (!group.memberUids.contains(uid)) {
-      await _firestore.collection('groups').doc(group.id).update({
-        'memberUids': FieldValue.arrayUnion([uid]),
-      });
-    }
-
-    // Kembalikan group terbaru dengan uid sudah ditambahkan
-    return GroupModel.fromFirestore(
-      await _firestore.collection('groups').doc(group.id).get(),
+    final result = await _supabase.rpc(
+      'join_group',
+      params: {'p_invite_code': normalizedCode},
     );
+
+    final rows = (result as List?) ?? const [];
+    if (rows.isEmpty) return null;
+    return GroupModel.fromMap(Map<String, dynamic>.from(rows.first as Map));
   }
 
-  /// Keluar dari grup. Jika anggota terakhir, grup otomatis diakhiri.
+  /// Keluar dari grup via RPC `leave_group`.
+  /// Jika anggota terakhir, grup otomatis diakhiri.
   /// Jika host keluar tetapi masih ada anggota lain, kepemilikan grup dialihkan.
   Future<void> leaveGroup({
     required String groupId,
     required String uid,
   }) async {
-    final docRef = _firestore.collection('groups').doc(groupId);
-    final doc = await docRef.get();
-
-    if (doc.exists) {
-      final group = GroupModel.fromFirestore(doc);
-      final remainingMembers = group.memberUids.where((m) => m != uid).toList();
-
-      if (remainingMembers.isEmpty) {
-        // Anggota terakhir keluar, akhiri grup
-        await endGroup(groupId);
-      } else {
-        final updates = <String, dynamic>{
-          'memberUids': FieldValue.arrayRemove([uid]),
-        };
-        if (group.hostUid == uid) {
-          updates['hostUid'] = remainingMembers.first;
-        }
-        await docRef.update(updates);
-        // Hapus data lokasi user dari RTDB
-        await _rtdb.ref('active_locations/$groupId/$uid').remove();
-      }
-    }
+    await _supabase.rpc('leave_group', params: {'p_group_id': groupId});
   }
 
-  /// Mengakhiri grup: set status 'ended' dan bersihkan data lokasi di RTDB.
+  /// Mengakhiri grup (hanya host) via RPC `end_group`.
   Future<void> endGroup(String groupId) async {
-    await _firestore.collection('groups').doc(groupId).update({
-      'status': 'ended',
-      'endedAt': Timestamp.now(),
-    });
-    await _rtdb.ref('active_locations/$groupId').remove();
+    await _supabase.rpc('end_group', params: {'p_group_id': groupId});
   }
 
   /// Mengambil data grup berdasarkan ID.
   Future<GroupModel?> getGroup(String groupId) async {
-    final doc = await _firestore.collection('groups').doc(groupId).get();
-    if (doc.exists) {
-      return GroupModel.fromFirestore(doc);
+    try {
+      final data = await _supabase
+          .from('groups')
+          .select()
+          .eq('id', groupId)
+          .maybeSingle();
+
+      if (data != null) {
+        return GroupModel.fromMap(data);
+      }
+    } catch (e) {
+      debugPrint('Error getting group: $e');
     }
     return null;
   }
 
   /// Mencari grup aktif yang diikuti oleh user tertentu.
   Future<GroupModel?> getActiveGroupForUser(String uid) async {
-    final querySnapshot = await _firestore
-        .collection('groups')
-        .where('memberUids', arrayContains: uid)
-        .where('status', isEqualTo: 'active')
-        .limit(1)
-        .get();
+    try {
+      final data = await _supabase
+          .from('groups')
+          .select()
+          .contains('member_uids', [uid])
+          .eq('status', 'active')
+          .order('created_at', ascending: false)
+          .limit(1)
+          .maybeSingle();
 
-    if (querySnapshot.docs.isNotEmpty) {
-      return GroupModel.fromFirestore(querySnapshot.docs.first);
+      if (data != null) {
+        return GroupModel.fromMap(data);
+      }
+    } catch (e) {
+      debugPrint('Error getting active group for user: $e');
     }
     return null;
   }
 
   /// Stream data grup secara real-time.
   Stream<GroupModel?> streamGroup(String groupId) {
-    return _firestore
-        .collection('groups')
-        .doc(groupId)
-        .snapshots()
-        .map((doc) {
-      if (doc.exists) {
-        return GroupModel.fromFirestore(doc);
-      }
-      return null;
-    });
+    return _supabase
+        .from('groups')
+        .stream(primaryKey: ['id'])
+        .eq('id', groupId)
+        .map((list) => list.isNotEmpty ? GroupModel.fromMap(list.first) : null);
   }
 }

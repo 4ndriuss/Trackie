@@ -9,15 +9,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_database/firebase_database.dart';
-import '../firebase_options.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../supabase_config.dart';
 
 /// [BackgroundLocationService] mengelola lifecycle background tracking.
 /// Saat tracking dimulai, service ini:
 /// 1. Menampilkan notifikasi persistent ("Tracking aktif...")
 /// 2. Mengambil koordinat GPS secara berkala
-/// 3. Mengirim lokasi ke Firebase Realtime Database
+/// 3. Mengirim lokasi ke Supabase Realtime Broadcast (Zero DB Write)
 class BackgroundLocationService {
   static const String _notificationChannelId = 'trackie_tracking';
   static const String _notificationChannelName = 'Location Tracking';
@@ -114,22 +113,15 @@ class BackgroundLocationService {
 Future<void> _onStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
 
-  // Inisialisasi Firebase di background isolate
-  try {
-    await Firebase.initializeApp(
-      options: DefaultFirebaseOptions.currentPlatform,
-    );
-  } catch (e) {
-    debugPrint('Firebase already initialized or error: $e');
-  }
-
-  final rtdb = FirebaseDatabase.instance;
+  // Inisialisasi client Supabase untuk background isolate
+  final supabase = SupabaseClient(SupabaseConfig.url, SupabaseConfig.anonKey);
 
   String? groupId;
   String? uid;
   String? userName;
   String currentStatus = 'online';
   Timer? locationTimer;
+  RealtimeChannel? trackingChannel;
 
   // Listen perubahan status (misal: SOS)
   service.on('setStatus').listen((event) {
@@ -140,7 +132,7 @@ Future<void> _onStart(ServiceInstance service) async {
   });
 
   // Listen perintah dari main isolate
-  service.on('startTracking').listen((event) {
+  service.on('startTracking').listen((event) async {
     groupId = event?['groupId'];
     uid = event?['uid'];
     userName = event?['userName'];
@@ -155,10 +147,16 @@ Future<void> _onStart(ServiceInstance service) async {
       );
     }
 
+    if (groupId != null) {
+      trackingChannel?.unsubscribe();
+      trackingChannel = supabase.channel('group_tracking:$groupId');
+      trackingChannel?.subscribe();
+    }
+
     // Mulai kirim lokasi setiap 5 detik
     locationTimer?.cancel();
     locationTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
-      if (groupId == null || uid == null) return;
+      if (groupId == null || uid == null || trackingChannel == null) return;
 
       try {
         final position = await Geolocator.getCurrentPosition(
@@ -168,15 +166,20 @@ Future<void> _onStart(ServiceInstance service) async {
           ),
         );
 
-        // Kirim ke Firebase Realtime Database dengan mempertahankan currentStatus
-        await rtdb.ref('active_locations/$groupId/$uid').set({
-          'uid': uid,
-          'name': userName,
-          'lat': position.latitude,
-          'lng': position.longitude,
-          'timestamp': ServerValue.timestamp,
-          'status': currentStatus,
-        });
+        // Kirim via Supabase Realtime Broadcast (Zero DB Cost)
+        await trackingChannel?.sendBroadcastMessage(
+          event: 'location_update',
+          payload: {
+            'uid': uid,
+            'name': userName,
+            'lat': position.latitude,
+            'lng': position.longitude,
+            'latitude': position.latitude,
+            'longitude': position.longitude,
+            'timestamp': DateTime.now().millisecondsSinceEpoch,
+            'status': currentStatus,
+          },
+        );
       } catch (e) {
         debugPrint('Background location error: $e');
       }
@@ -188,15 +191,21 @@ Future<void> _onStart(ServiceInstance service) async {
     locationTimer?.cancel();
     locationTimer = null;
 
-    // Set status offline sebelum stop
-    if (groupId != null && uid != null) {
+    // Broadcast status offline sebelum stop
+    if (groupId != null && uid != null && trackingChannel != null) {
       try {
-        await rtdb.ref('active_locations/$groupId/$uid').update({
-          'status': 'offline',
-          'timestamp': ServerValue.timestamp,
-        });
+        await trackingChannel?.sendBroadcastMessage(
+          event: 'status_update',
+          payload: {
+            'uid': uid,
+            'status': 'offline',
+            'timestamp': DateTime.now().millisecondsSinceEpoch,
+          },
+        );
+        await trackingChannel?.unsubscribe();
+        trackingChannel = null;
       } catch (e) {
-        debugPrint('Failed to update offline status in background: $e');
+        debugPrint('Failed to broadcast offline in background: $e');
       }
     }
 

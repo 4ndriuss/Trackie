@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'l10n/app_localizations.dart';
@@ -13,7 +13,7 @@ import 'providers/group_provider.dart';
 import 'providers/location_provider.dart';
 import 'providers/locale_provider.dart';
 import 'services/background_location_service.dart';
-import 'firebase_options.dart';
+import 'supabase_config.dart';
 
 import 'package:flutter/foundation.dart';
 
@@ -21,8 +21,10 @@ final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.light);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: DefaultFirebaseOptions.currentPlatform,
+  
+  await Supabase.initialize(
+    url: SupabaseConfig.url,
+    publishableKey: SupabaseConfig.anonKey,
   );
   
   if (!kIsWeb) {

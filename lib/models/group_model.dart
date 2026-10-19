@@ -1,8 +1,6 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-
-/// Model data yang merepresentasikan grup perjalanan di koleksi Firestore `groups`.
+/// Model data yang merepresentasikan grup perjalanan.
 class GroupModel {
-  /// Unique Identifier dari grup/dokumen Firestore
+  /// Unique Identifier dari grup
   final String id;
 
   /// Nama grup perjalanan
@@ -14,7 +12,7 @@ class GroupModel {
   /// Tujuan perjalanan
   final String destination;
 
-  /// Kode unik undangan (format TRG-XXX)
+  /// Kode unik undangan (format TRG-XXXXXX)
   final String inviteCode;
 
   /// UID pengguna pembuat / host grup
@@ -61,17 +59,11 @@ class GroupModel {
   /// Jumlah total anggota grup saat ini
   int get memberCount => memberUids.length;
 
-  /// Membuat instance [GroupModel] dari Firestore [DocumentSnapshot]
-  factory GroupModel.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>? ?? {};
-    return GroupModel.fromMap(data, doc.id);
-  }
-
   /// Membuat instance [GroupModel] dari generic [Map]
   factory GroupModel.fromMap(Map<String, dynamic> map, [String? id]) {
-    final rawMembers = map['memberUids'] as List<dynamic>?;
+    final rawMembers = map['member_uids'] ?? map['memberUids'];
     final List<String> members = rawMembers != null
-        ? List<String>.from(rawMembers.map((e) => e.toString()))
+        ? List<String>.from((rawMembers as List).map((e) => e.toString()))
         : <String>[];
 
     return GroupModel(
@@ -79,33 +71,48 @@ class GroupModel {
       name: map['name'] as String? ?? '',
       type: map['type'] as String? ?? 'motor',
       destination: map['destination'] as String? ?? '',
-      inviteCode: map['inviteCode'] as String? ?? '',
-      hostUid: map['hostUid'] as String? ?? '',
+      inviteCode: map['invite_code'] as String? ?? map['inviteCode'] as String? ?? '',
+      hostUid: map['host_uid'] as String? ?? map['hostUid'] as String? ?? '',
       memberUids: members,
       status: map['status'] as String? ?? 'active',
-      createdAt: _parseDateTime(map['createdAt']),
-      endedAt: _parseNullableDateTime(map['endedAt']),
+      createdAt: _parseDateTime(map['created_at'] ?? map['createdAt']),
+      endedAt: _parseNullableDateTime(map['ended_at'] ?? map['endedAt']),
     );
   }
 
-  /// Mengonversi instance [GroupModel] ke dalam bentuk Map untuk Firestore
-  Map<String, dynamic> toFirestore() {
+  /// Mengonversi instance [GroupModel] ke dalam bentuk Map
+  Map<String, dynamic> toMap() {
     return {
       'id': id,
       'name': name,
       'type': type,
       'destination': destination,
+      'invite_code': inviteCode,
       'inviteCode': inviteCode,
+      'host_uid': hostUid,
       'hostUid': hostUid,
+      'member_uids': memberUids,
       'memberUids': memberUids,
       'status': status,
-      'createdAt': Timestamp.fromDate(createdAt),
-      'endedAt': endedAt != null ? Timestamp.fromDate(endedAt!) : null,
+      'created_at': createdAt.toIso8601String(),
+      'ended_at': endedAt?.toIso8601String(),
     };
   }
 
-  /// Alias untuk [toFirestore] guna kompatibilitas fungsi umum
-  Map<String, dynamic> toMap() => toFirestore();
+  /// Alias untuk toMap
+  Map<String, dynamic> toFirestore() => toMap();
+  Map<String, dynamic> toSupabase() => {
+        if (id.isNotEmpty) 'id': id,
+        'name': name,
+        'type': type,
+        'destination': destination,
+        'invite_code': inviteCode,
+        'host_uid': hostUid,
+        'member_uids': memberUids,
+        'status': status,
+        'created_at': createdAt.toIso8601String(),
+        'ended_at': endedAt?.toIso8601String(),
+      };
 
   /// Membuat salinan objek [GroupModel] dengan perubahan parsial
   GroupModel copyWith({
@@ -136,8 +143,8 @@ class GroupModel {
 
   /// Helper untuk mem-parsing format DateTime wajib
   static DateTime _parseDateTime(dynamic value) {
-    if (value is Timestamp) {
-      return value.toDate();
+    if (value is DateTime) {
+      return value;
     } else if (value is String) {
       return DateTime.tryParse(value) ?? DateTime.now();
     } else if (value is int) {
@@ -149,8 +156,8 @@ class GroupModel {
   /// Helper untuk mem-parsing format DateTime yang opsional / nullable
   static DateTime? _parseNullableDateTime(dynamic value) {
     if (value == null) return null;
-    if (value is Timestamp) {
-      return value.toDate();
+    if (value is DateTime) {
+      return value;
     } else if (value is String) {
       return DateTime.tryParse(value);
     } else if (value is int) {

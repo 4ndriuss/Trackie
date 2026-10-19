@@ -1,13 +1,14 @@
 // File: map_page.dart
 // Menampilkan peta langsung (real-time) yang melacak posisi anggota grup.
-// Halaman ini menggunakan Google Maps untuk menampilkan marker pengguna
-// serta panel di bagian bawah untuk melihat status masing-masing anggota.
+// Halaman ini menggunakan OpenStreetMap (flutter_map) untuk menampilkan marker
+// pengguna serta panel di bagian bawah untuk melihat status masing-masing anggota.
 import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import '../theme/app_theme.dart';
 import '../providers/auth_provider.dart';
@@ -47,7 +48,7 @@ String formatDistance(double m) =>
 /// [MapPage] adalah halaman utama untuk fitur pelacakan grup.
 class MapPage extends StatefulWidget {
   const MapPage({super.key, required this.isHost});
-  
+
   /// Jika true, pengguna ini adalah pembuat grup dan bisa melihat kode undangan.
   final bool isHost;
 
@@ -57,29 +58,37 @@ class MapPage extends StatefulWidget {
 
 class _MapPageState extends State<MapPage> {
   // Posisi kamera default saat peta pertama dimuat (contoh: Jakarta)
-  static const _initialPosition = CameraPosition(
-    target: LatLng(-6.200000, 106.816666),
-    zoom: 14.4746,
-  );
+  static const LatLng _initialCenter = LatLng(-6.200000, 106.816666);
+  static const double _initialZoom = 14.5;
 
-  // Data fallback saat stream lokasi RTDB belum mengembalikan data
+  // Data fallback saat stream lokasi belum mengembalikan data
   final List<GroupMember> _fallbackMembers = [
     const GroupMember(
-      id: 'anda', name: 'Anda', status: MemberStatus.online,
-      position: LatLng(-6.200000, 106.816666), distanceMeters: 0,
+      id: 'anda',
+      name: 'Anda',
+      status: MemberStatus.online,
+      position: LatLng(-6.200000, 106.816666),
+      distanceMeters: 0,
     ),
     const GroupMember(
-      id: 'budi', name: 'Budi (NMAX Hitam)', status: MemberStatus.online,
-      position: LatLng(-6.201000, 106.817666), distanceMeters: 120,
+      id: 'budi',
+      name: 'Budi (NMAX Hitam)',
+      status: MemberStatus.online,
+      position: LatLng(-6.201000, 106.817666),
+      distanceMeters: 120,
     ),
     const GroupMember(
-      id: 'citra', name: 'Citra (Vario)', status: MemberStatus.offline,
-      position: LatLng(-6.210000, 106.820666), distanceMeters: 1500,
+      id: 'citra',
+      name: 'Citra (Vario)',
+      status: MemberStatus.offline,
+      position: LatLng(-6.210000, 106.820666),
+      distanceMeters: 1500,
     ),
   ];
 
-  // Controller untuk memanipulasi Google Maps (misal: menggeser kamera)
-  final _mapController = Completer<GoogleMapController>();
+  // Controller untuk memanipulasi peta flutter_map (misal: menggeser kamera)
+  final MapController _mapController = MapController();
+  bool _hasCenteredOnRealLocation = false;
 
   @override
   void initState() {
@@ -87,6 +96,12 @@ class _MapPageState extends State<MapPage> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initRealTimeTracking();
     });
+  }
+
+  @override
+  void dispose() {
+    _mapController.dispose();
+    super.dispose();
   }
 
   Future<void> _initRealTimeTracking() async {
@@ -118,8 +133,8 @@ class _MapPageState extends State<MapPage> {
     LocationProvider locationProvider,
     String? currentUid,
   ) {
-    final rtdbMembers = locationProvider.members;
-    if (rtdbMembers.isEmpty) {
+    final liveMembers = locationProvider.members;
+    if (liveMembers.isEmpty) {
       return _fallbackMembers;
     }
 
@@ -127,7 +142,7 @@ class _MapPageState extends State<MapPage> {
     double? myLng = locationProvider.currentPosition?.longitude;
 
     if (currentUid != null) {
-      for (final m in rtdbMembers) {
+      for (final m in liveMembers) {
         if (m.uid == currentUid) {
           myLat = m.lat;
           myLng = m.lng;
@@ -136,7 +151,18 @@ class _MapPageState extends State<MapPage> {
       }
     }
 
-    return rtdbMembers.map((loc) {
+    if (!_hasCenteredOnRealLocation) {
+      final targetLat = myLat ?? liveMembers.first.lat;
+      final targetLng = myLng ?? liveMembers.first.lng;
+      _hasCenteredOnRealLocation = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _mapController.move(LatLng(targetLat, targetLng), _initialZoom);
+        }
+      });
+    }
+
+    return liveMembers.map((loc) {
       final MemberStatus status;
       if (loc.isSos) {
         status = MemberStatus.sos;
@@ -146,9 +172,10 @@ class _MapPageState extends State<MapPage> {
         status = MemberStatus.online;
       }
 
-      final double distance = (myLat != null && myLng != null && loc.uid != currentUid)
-          ? HaversineUtils.distanceInMeters(myLat, myLng, loc.lat, loc.lng)
-          : 0.0;
+      final double distance =
+          (myLat != null && myLng != null && loc.uid != currentUid)
+              ? HaversineUtils.distanceInMeters(myLat, myLng, loc.lat, loc.lng)
+              : 0.0;
 
       return GroupMember(
         id: loc.uid,
@@ -160,28 +187,80 @@ class _MapPageState extends State<MapPage> {
     }).toList();
   }
 
-  /// Mengubah list [members] menjadi kumpulan [Marker] untuk ditampilkan di peta.
-  Set<Marker> _buildMarkers(List<GroupMember> members) => {
-        for (final m in members)
-          Marker(
-            markerId: MarkerId(m.id),
-            position: m.position,
-            alpha: m.isOnline ? 1 : 0.5, // Redupkan jika sedang offline
-            icon: BitmapDescriptor.defaultMarkerWithHue(
-              m.isSos 
-                  ? BitmapDescriptor.hueRed 
-                  : (m.isOnline ? BitmapDescriptor.hueGreen : BitmapDescriptor.hueOrange),
-            ),
-            infoWindow: InfoWindow(
-              title: m.isSos ? '🚨 ${m.name} - SOS!' : (m.isOnline ? m.name : '${m.name} - Terputus'),
+  /// Mengubah list [members] menjadi kumpulan [Marker] untuk ditampilkan di peta OpenStreetMap.
+  List<Marker> _buildMarkers(List<GroupMember> members) {
+    return [
+      for (final m in members)
+        Marker(
+          key: ValueKey(m.id),
+          point: m.position,
+          width: 120,
+          height: 72,
+          alignment: Alignment.topCenter,
+          child: Opacity(
+            opacity: m.isOnline ? 1.0 : 0.55,
+            child: GestureDetector(
+              onTap: () => _focusOn(m),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 2,
+                    ),
+                    decoration: BoxDecoration(
+                      color: m.isSos
+                          ? Colors.red.shade700
+                          : Colors.black.withValues(alpha: 0.75),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      m.isSos ? '🚨 ${m.name}' : m.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: m.isSos
+                          ? Colors.red
+                          : (m.isOnline ? Colors.green : Colors.orange),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.25),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      m.isSos ? Icons.warning_amber_rounded : Icons.navigation,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-      };
+        ),
+    ];
+  }
 
   /// Mengarahkan kamera peta untuk fokus ke posisi anggota tertentu.
-  Future<void> _focusOn(GroupMember m) async {
-    final c = await _mapController.future;
-    await c.animateCamera(CameraUpdate.newLatLngZoom(m.position, 16));
+  void _focusOn(GroupMember m) {
+    _mapController.move(m.position, 16.0);
   }
 
   /// Menampilkan dialog berisi kode undangan untuk dibagikan ke teman.
@@ -202,7 +281,9 @@ class _MapPageState extends State<MapPage> {
               code,
               textAlign: TextAlign.center,
               style: const TextStyle(
-                fontSize: 32, letterSpacing: 2.0, fontWeight: FontWeight.bold,
+                fontSize: 32,
+                letterSpacing: 2.0,
+                fontWeight: FontWeight.bold,
               ),
             ),
           ],
@@ -221,7 +302,11 @@ class _MapPageState extends State<MapPage> {
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              SharePlus.instance.share(ShareParams(text: 'Ayo gabung perjalanan saya di Trackie! Gunakan kode: $code'));
+              SharePlus.instance.share(
+                ShareParams(
+                  text: 'Ayo gabung perjalanan saya di Trackie! Gunakan kode: $code',
+                ),
+              );
             },
             child: const Text('BAGIKAN'),
           ),
@@ -282,7 +367,7 @@ class _MapPageState extends State<MapPage> {
         title: const Text('🚨 Tekan Tombol Darurat?'),
         content: const Text(
           'Gunakan hanya jika Anda mengalami kecelakaan, mogok, atau butuh bantuan mendesak. '
-          'Seluruh anggota grup akan menerima alarm peringatan.'
+          'Seluruh anggota grup akan menerima alarm peringatan.',
         ),
         actions: [
           TextButton(
@@ -364,15 +449,24 @@ class _MapPageState extends State<MapPage> {
         builder: (context, constraints) {
           return Stack(
             children: [
-              // Lapisan Peta
-              GoogleMap(
-                initialCameraPosition: _initialPosition,
-                markers: _buildMarkers(members),
-                // Memberikan padding bawah agar logo Google tidak tertutup oleh panel bottom sheet
-                padding: EdgeInsets.only(bottom: constraints.maxHeight * 0.3),
-                onMapCreated: (c) {
-                  if (!_mapController.isCompleted) _mapController.complete(c);
-                },
+              // Lapisan Peta OpenStreetMap
+              FlutterMap(
+                mapController: _mapController,
+                options: MapOptions(
+                  initialCenter: members.isNotEmpty
+                      ? members.first.position
+                      : _initialCenter,
+                  initialZoom: _initialZoom,
+                ),
+                children: [
+                  TileLayer(
+                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'com.example.trackie',
+                  ),
+                  MarkerLayer(
+                    markers: _buildMarkers(members),
+                  ),
+                ],
               ),
               // Tombol SOS Mengambang
               Positioned(
@@ -457,13 +551,19 @@ class _MapPageState extends State<MapPage> {
                           final m = members[i];
                           return ListTile(
                             onTap: () => _focusOn(m), // Geser kamera saat anggota ditekan
-                            tileColor: m.isSos ? theme.colorScheme.error.withValues(alpha: 0.1) : null, // ignore: deprecated_member_use
+                            tileColor: m.isSos
+                                ? theme.colorScheme.error.withValues(alpha: 0.1)
+                                : null,
                             leading: Stack(
                               children: [
                                 CircleAvatar(
-                                  backgroundColor: m.isSos ? theme.colorScheme.error : null,
-                                  foregroundColor: m.isSos ? Colors.white : null,
-                                  child: Icon(m.isSos ? Icons.warning : Icons.person),
+                                  backgroundColor:
+                                      m.isSos ? theme.colorScheme.error : null,
+                                  foregroundColor:
+                                      m.isSos ? Colors.white : null,
+                                  child: Icon(
+                                    m.isSos ? Icons.warning : Icons.person,
+                                  ),
                                 ),
                                 // Indikator titik status online/offline
                                 Positioned(
@@ -473,8 +573,8 @@ class _MapPageState extends State<MapPage> {
                                     width: 12,
                                     height: 12,
                                     decoration: BoxDecoration(
-                                      color: m.isSos 
-                                          ? theme.colorScheme.error 
+                                      color: m.isSos
+                                          ? theme.colorScheme.error
                                           : (m.isOnline ? Colors.green : Colors.grey),
                                       shape: BoxShape.circle,
                                       border: Border.all(
@@ -489,15 +589,19 @@ class _MapPageState extends State<MapPage> {
                             title: Text(
                               m.name,
                               style: TextStyle(
-                                fontWeight: m.isSos ? FontWeight.bold : FontWeight.normal,
+                                fontWeight:
+                                    m.isSos ? FontWeight.bold : FontWeight.normal,
                                 color: m.isSos ? theme.colorScheme.error : null,
                               ),
                             ),
                             subtitle: Text(
-                              m.isSos ? '🚨 BUTUH BANTUAN!' : (m.isOnline ? 'Terhubung' : 'Terputus sinyal'),
+                              m.isSos
+                                  ? '🚨 BUTUH BANTUAN!'
+                                  : (m.isOnline ? 'Terhubung' : 'Terputus sinyal'),
                               style: TextStyle(
                                 color: m.isSos ? theme.colorScheme.error : null,
-                                fontWeight: m.isSos ? FontWeight.bold : FontWeight.normal,
+                                fontWeight:
+                                    m.isSos ? FontWeight.bold : FontWeight.normal,
                               ),
                             ),
                             trailing: Column(
@@ -507,7 +611,9 @@ class _MapPageState extends State<MapPage> {
                                 Text('Jarak', style: theme.textTheme.labelSmall),
                                 Text(
                                   formatDistance(m.distanceMeters),
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ],
                             ),
@@ -522,7 +628,7 @@ class _MapPageState extends State<MapPage> {
               ),
             ],
           );
-        }
+        },
       ),
     );
   }

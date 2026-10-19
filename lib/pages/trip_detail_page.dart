@@ -4,14 +4,15 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:share_plus/share_plus.dart';
 import '../theme/app_theme.dart';
 import 'history_tab.dart'; // To access TripHistory model
 
 /// Halaman [TripDetailPage] menampilkan detail rute perjalanan dari histori.
-/// Merender `GoogleMap` statis yang memperlihatkan polyline rute dan ringkasan 
-/// informasi jarak serta durasi perjalanan.
+/// Merender `FlutterMap` (OpenStreetMap) yang memperlihatkan polyline rute dan
+/// ringkasan informasi jarak serta durasi perjalanan.
 class TripDetailPage extends StatefulWidget {
   final TripHistory trip;
 
@@ -22,9 +23,15 @@ class TripDetailPage extends StatefulWidget {
 }
 
 class _TripDetailPageState extends State<TripDetailPage> {
-  final _mapController = Completer<GoogleMapController>();
+  final MapController _mapController = MapController();
   final GlobalKey _shareCardKey = GlobalKey();
   bool _isSharing = false;
+
+  @override
+  void dispose() {
+    _mapController.dispose();
+    super.dispose();
+  }
 
   /// Membuat teks ringkasan perjalanan untuk dibagikan.
   String _buildShareText() {
@@ -48,9 +55,10 @@ class _TripDetailPageState extends State<TripDetailPage> {
   /// Capture widget menjadi gambar untuk dibagikan.
   Future<Uint8List?> _captureShareCard() async {
     try {
-      final boundary = _shareCardKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      final boundary =
+          _shareCardKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
       if (boundary == null) return null;
-      
+
       final image = await boundary.toImage(pixelRatio: 3.0);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       return byteData?.buffer.asUint8List();
@@ -91,7 +99,9 @@ class _TripDetailPageState extends State<TripDetailPage> {
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('❌ Gagal membuat gambar. Mencoba bagikan sebagai teks...')),
+            const SnackBar(
+              content: Text('❌ Gagal membuat gambar. Mencoba bagikan sebagai teks...'),
+            ),
           );
           await _shareAsText();
         }
@@ -131,7 +141,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
                     width: 40,
                     height: 4,
                     decoration: BoxDecoration(
-                      color: theme.colorScheme.secondary.withValues(alpha: 0.3), // ignore: deprecated_member_use
+                      color: theme.colorScheme.secondary.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   ),
@@ -157,10 +167,10 @@ class _TripDetailPageState extends State<TripDetailPage> {
                 Container(
                   padding: const EdgeInsets.all(AppSpacing.md),
                   decoration: BoxDecoration(
-                    color: theme.colorScheme.secondary.withValues(alpha: 0.05), // ignore: deprecated_member_use
+                    color: theme.colorScheme.secondary.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
-                      color: theme.colorScheme.secondary.withValues(alpha: 0.15), // ignore: deprecated_member_use
+                      color: theme.colorScheme.secondary.withValues(alpha: 0.15),
                     ),
                   ),
                   child: Row(
@@ -168,7 +178,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
                       Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: theme.primaryColor.withValues(alpha: 0.1), // ignore: deprecated_member_use
+                          color: theme.primaryColor.withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Icon(Icons.route, color: theme.primaryColor, size: 24),
@@ -180,11 +190,17 @@ class _TripDetailPageState extends State<TripDetailPage> {
                           children: [
                             Text(
                               widget.trip.destination,
-                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 15,
+                              ),
                             ),
                             Text(
                               widget.trip.groupName,
-                              style: const TextStyle(fontSize: 12, color: Colors.grey),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
                             ),
                             const SizedBox(height: 2),
                             Text(
@@ -278,7 +294,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
     final text = _buildShareText();
     // Hapus markdown bold markers untuk clipboard
     final plainText = text.replaceAll('*', '');
-    
+
     Clipboard.setData(ClipboardData(text: plainText)).then((_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -306,7 +322,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.1), // ignore: deprecated_member_use
+              color: color.withValues(alpha: 0.1),
               shape: BoxShape.circle,
             ),
             child: Icon(icon, color: color, size: 24),
@@ -327,8 +343,9 @@ class _TripDetailPageState extends State<TripDetailPage> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final initialPosition = widget.trip.routePoints.isNotEmpty
-        ? widget.trip.routePoints.first
+    final points = widget.trip.routePoints;
+    final initialPosition = points.isNotEmpty
+        ? points.first
         : const LatLng(-6.200000, 106.816666);
 
     return Scaffold(
@@ -349,68 +366,79 @@ class _TripDetailPageState extends State<TripDetailPage> {
             children: [
               Expanded(
                 flex: 2,
-                child: GoogleMap(
-                  initialCameraPosition: CameraPosition(
-                    target: initialPosition,
-                    zoom: 13.0,
+                child: FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: initialPosition,
+                    initialZoom: 13.0,
+                    initialCameraFit: points.length >= 2
+                        ? CameraFit.bounds(
+                            bounds: LatLngBounds.fromPoints(points),
+                            padding: const EdgeInsets.all(50.0),
+                          )
+                        : null,
                   ),
-                  polylines: {
-                    if (widget.trip.routePoints.isNotEmpty)
-                      Polyline(
-                        polylineId: const PolylineId('route_path'),
-                        points: widget.trip.routePoints,
-                        color: theme.colorScheme.primary,
-                        width: 4,
+                  children: [
+                    TileLayer(
+                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.example.trackie',
+                    ),
+                    if (points.isNotEmpty)
+                      PolylineLayer(
+                        polylines: [
+                          Polyline(
+                            points: points,
+                            color: theme.colorScheme.primary,
+                            strokeWidth: 4.5,
+                          ),
+                        ],
                       ),
-                  },
-                  markers: {
-                    if (widget.trip.routePoints.isNotEmpty) ...[
-                      Marker(
-                        markerId: const MarkerId('start'),
-                        position: widget.trip.routePoints.first,
-                        infoWindow: const InfoWindow(title: 'Titik Awal'),
-                        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueGreen),
-                      ),
-                      Marker(
-                        markerId: const MarkerId('end'),
-                        position: widget.trip.routePoints.last,
-                        infoWindow: const InfoWindow(title: 'Titik Akhir'),
-                        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-                      ),
-                    ]
-                  },
-                  onMapCreated: (c) {
-                    if (!_mapController.isCompleted) {
-                      _mapController.complete(c);
-                      
-                      // Adjust camera bounds to fit the route
-                      if (widget.trip.routePoints.isNotEmpty) {
-                        Future.delayed(const Duration(milliseconds: 300), () {
-                          double minLat = widget.trip.routePoints.first.latitude;
-                          double maxLat = widget.trip.routePoints.first.latitude;
-                          double minLng = widget.trip.routePoints.first.longitude;
-                          double maxLng = widget.trip.routePoints.first.longitude;
-                          
-                          for (var point in widget.trip.routePoints) {
-                            if (point.latitude < minLat) minLat = point.latitude;
-                            if (point.latitude > maxLat) maxLat = point.latitude;
-                            if (point.longitude < minLng) minLng = point.longitude;
-                            if (point.longitude > maxLng) maxLng = point.longitude;
-                          }
-                          
-                          c.animateCamera(
-                            CameraUpdate.newLatLngBounds(
-                              LatLngBounds(
-                                southwest: LatLng(minLat, minLng),
-                                northeast: LatLng(maxLat, maxLng),
+                    if (points.isNotEmpty)
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: points.first,
+                            width: 40,
+                            height: 40,
+                            child: Tooltip(
+                              message: 'Titik Awal',
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.green,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white, width: 2.5),
+                                ),
+                                child: const Icon(
+                                  Icons.play_arrow_rounded,
+                                  color: Colors.white,
+                                  size: 22,
+                                ),
                               ),
-                              50.0, // padding
                             ),
-                          );
-                        });
-                      }
-                    }
-                  },
+                          ),
+                          Marker(
+                            point: points.last,
+                            width: 40,
+                            height: 40,
+                            child: Tooltip(
+                              message: 'Titik Akhir',
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(color: Colors.white, width: 2.5),
+                                ),
+                                child: const Icon(
+                                  Icons.flag_rounded,
+                                  color: Colors.white,
+                                  size: 20,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
                 ),
               ),
               Expanded(
@@ -430,132 +458,134 @@ class _TripDetailPageState extends State<TripDetailPage> {
                         ),
                       ],
                     ),
-                  child: SingleChildScrollView(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.trip.destination,
-                          style: theme.textTheme.displayLarge?.copyWith(fontSize: 24),
-                        ),
-                        Text(
-                          widget.trip.groupName,
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.secondary,
-                            fontWeight: FontWeight.bold,
+                    child: SingleChildScrollView(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            widget.trip.destination,
+                            style: theme.textTheme.displayLarge?.copyWith(fontSize: 24),
                           ),
-                        ),
-                        const SizedBox(height: AppSpacing.sm),
-                        Text(
-                          '${widget.trip.date.day}/${widget.trip.date.month}/${widget.trip.date.year}',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.secondary,
-                          ),
-                        ),
-                        const SizedBox(height: AppSpacing.lg),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceAround,
-                          children: [
-                            _buildStatCard(
-                              context,
-                              icon: Icons.map_outlined,
-                              label: 'Total Jarak',
-                              value: '${widget.trip.distanceKm} km',
-                            ),
-                            Container(
-                              width: 1,
-                              height: 40,
-                              color: theme.dividerColor,
-                            ),
-                            _buildStatCard(
-                              context,
-                              icon: Icons.timer_outlined,
-                              label: 'Durasi',
-                              value: widget.trip.duration,
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: AppSpacing.xl),
-                        
-                        // Jurnal & Rating Perjalanan
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(AppSpacing.md),
-                          decoration: BoxDecoration(
-                            color: theme.colorScheme.secondary.withValues(alpha: 0.05), // ignore: deprecated_member_use
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(
-                              color: theme.colorScheme.secondary.withValues(alpha: 0.2), // ignore: deprecated_member_use
+                          Text(
+                            widget.trip.groupName,
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.secondary,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                          const SizedBox(height: AppSpacing.sm),
+                          Text(
+                            '${widget.trip.date.day}/${widget.trip.date.month}/${widget.trip.date.year}',
+                            style: theme.textTheme.bodyMedium?.copyWith(
+                              color: theme.colorScheme.secondary,
+                            ),
+                          ),
+                          const SizedBox(height: AppSpacing.lg),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
                             children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    'Catatan Perjalanan',
-                                    style: theme.textTheme.titleMedium?.copyWith(fontSize: 16),
-                                  ),
-                                  Row(
-                                    children: List.generate(5, (index) {
-                                      return Icon(
-                                        index < 4 ? Icons.star : Icons.star_half, // 4.5 stars dummy
-                                        color: Colors.amber,
-                                        size: 20,
-                                      );
-                                    }),
-                                  ),
-                                ],
+                              _buildStatCard(
+                                context,
+                                icon: Icons.map_outlined,
+                                label: 'Total Jarak',
+                                value: '${widget.trip.distanceKm} km',
                               ),
-                              const SizedBox(height: AppSpacing.sm),
-                              Text(
-                                '"Rute asik, aspal mulus, tapi sempat hujan deras di daerah pegunungan. Untung bawa jas hujan!"',
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  fontStyle: FontStyle.italic,
-                                  color: theme.colorScheme.secondary,
-                                ),
+                              Container(
+                                width: 1,
+                                height: 40,
+                                color: theme.dividerColor,
                               ),
-                              const SizedBox(height: AppSpacing.md),
-                              Align(
-                                alignment: Alignment.centerRight,
-                                child: TextButton.icon(
-                                  onPressed: () {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(content: Text('Fitur edit jurnal akan segera hadir!')),
-                                    );
-                                  },
-                                  icon: const Icon(Icons.edit_note, size: 18),
-                                  label: const Text('Edit Jurnal'),
-                                  style: TextButton.styleFrom(
-                                    padding: EdgeInsets.zero,
-                                    minimumSize: const Size(50, 30),
-                                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                  ),
-                                ),
+                              _buildStatCard(
+                                context,
+                                icon: Icons.timer_outlined,
+                                label: 'Durasi',
+                                value: widget.trip.duration,
                               ),
                             ],
                           ),
-                        ),
+                          const SizedBox(height: AppSpacing.xl),
 
-                        const SizedBox(height: AppSpacing.xl),
-                        // Tombol Bagikan
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: _showShareBottomSheet,
-                            icon: const Icon(Icons.share),
-                            label: const Text('BAGIKAN RUTE'),
-                            style: ElevatedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 16),
+                          // Jurnal & Rating Perjalanan
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(AppSpacing.md),
+                            decoration: BoxDecoration(
+                              color: theme.colorScheme.secondary.withValues(alpha: 0.05),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: theme.colorScheme.secondary.withValues(alpha: 0.2),
+                              ),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      'Catatan Perjalanan',
+                                      style: theme.textTheme.titleMedium?.copyWith(fontSize: 16),
+                                    ),
+                                    Row(
+                                      children: List.generate(5, (index) {
+                                        return Icon(
+                                          index < 4 ? Icons.star : Icons.star_half,
+                                          color: Colors.amber,
+                                          size: 20,
+                                        );
+                                      }),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: AppSpacing.sm),
+                                Text(
+                                  '"Rute asik, aspal mulus, tapi sempat hujan deras di daerah pegunungan. Untung bawa jas hujan!"',
+                                  style: theme.textTheme.bodyMedium?.copyWith(
+                                    fontStyle: FontStyle.italic,
+                                    color: theme.colorScheme.secondary,
+                                  ),
+                                ),
+                                const SizedBox(height: AppSpacing.md),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: TextButton.icon(
+                                    onPressed: () {
+                                      ScaffoldMessenger.of(context).showSnackBar(
+                                        const SnackBar(
+                                          content: Text('Fitur edit jurnal akan segera hadir!'),
+                                        ),
+                                      );
+                                    },
+                                    icon: const Icon(Icons.edit_note, size: 18),
+                                    label: const Text('Edit Jurnal'),
+                                    style: TextButton.styleFrom(
+                                      padding: EdgeInsets.zero,
+                                      minimumSize: const Size(50, 30),
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                        ),
-                      ],
+
+                          const SizedBox(height: AppSpacing.xl),
+                          // Tombol Bagikan
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: _showShareBottomSheet,
+                              icon: const Icon(Icons.share),
+                              label: const Text('BAGIKAN RUTE'),
+                              style: ElevatedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 16),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
                 ),
               ),
             ],
@@ -584,12 +614,20 @@ class _TripDetailPageState extends State<TripDetailPage> {
     );
   }
 
-  Widget _buildStatCard(BuildContext context, {required IconData icon, required String label, required String value}) {
+  Widget _buildStatCard(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String value,
+  }) {
     return Column(
       children: [
         Icon(icon, color: Theme.of(context).primaryColor, size: 28),
         const SizedBox(height: AppSpacing.sm),
-        Text(value, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        Text(
+          value,
+          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+        ),
         Text(label, style: Theme.of(context).textTheme.labelSmall),
       ],
     );

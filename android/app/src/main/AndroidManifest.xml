@@ -46,10 +46,6 @@
             android:name="flutterEmbedding"
             android:value="2" />
 
-        <!-- TODO: Add your real Google Maps API Key here -->
-        <meta-data
-            android:name="com.google.android.geo.API_KEY"
-            android:value="API_KEY_ANDA_DISINI"/>
 
         <!-- Foreground Service untuk Background Location Tracking -->
         <service

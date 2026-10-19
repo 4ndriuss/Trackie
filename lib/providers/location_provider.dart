@@ -1,6 +1,6 @@
 // File: location_provider.dart
 // Provider untuk mengelola state lokasi real-time anggota grup.
-// Mengintegrasikan LocationService (Firebase RTDB), BackgroundLocationService
+// Mengintegrasikan LocationService (Supabase Realtime Broadcast), BackgroundLocationService
 // (Foreground Service), dan PermissionService (izin lokasi).
 import 'dart:async';
 import 'package:flutter/foundation.dart';
@@ -11,7 +11,7 @@ import '../services/permission_service.dart';
 import '../models/location_model.dart';
 
 /// [LocationProvider] mengelola:
-/// - Stream lokasi anggota grup dari Firebase RTDB
+/// - Stream lokasi anggota grup dari Supabase Realtime Broadcast
 /// - Background tracking via Foreground Service
 /// - Permission handling untuk lokasi
 class LocationProvider extends ChangeNotifier {
@@ -106,6 +106,11 @@ class LocationProvider extends ChangeNotifier {
 
     // Stop stream listener
     stopListening();
+
+    // Tutup channel Realtime agar tidak terus menerima lokasi grup lama
+    if (groupId != null) {
+      await _locationService.cleanupGroupLocations(groupId);
+    }
   }
 
   /// Hanya stop stream listener (tanpa stop background service).

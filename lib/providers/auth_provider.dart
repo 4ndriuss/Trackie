@@ -3,9 +3,13 @@
 // Menghubungkan UI dengan AuthService dan menyimpan data user yang sedang login.
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/auth_service.dart';
 import '../models/user_model.dart';
+
+// Re-export agar halaman yang meng-import AuthProvider bisa memakai
+// `user.uid` / `user.displayName` pada objek User Supabase.
+export '../services/auth_service.dart' show SupabaseUserExtension;
 
 /// [AuthProvider] mengelola state autentikasi dan profil pengguna.
 /// Digunakan oleh AuthWrapper untuk menentukan tampilan (Login vs MainPage).
@@ -53,8 +57,8 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return true;
-    } on FirebaseAuthException catch (e) {
-      _error = _getAuthErrorMessage(e.code);
+    } on AuthException catch (e) {
+      _error = _getAuthErrorMessage(e.message);
       _isLoading = false;
       notifyListeners();
       return false;
@@ -82,7 +86,7 @@ class AuthProvider extends ChangeNotifier {
       _error = null;
       notifyListeners();
 
-      final credential = await _authService.signUp(
+      await _authService.signUp(
         name: name,
         email: email,
         password: password,
@@ -90,7 +94,8 @@ class AuthProvider extends ChangeNotifier {
         phone: phone,
         birthDate: birthDate,
       );
-      await credential.user?.updateDisplayName(name);
+      // Nama sudah dikirim sebagai metadata saat signUp. Jangan panggil
+      // updateUser di sini: bila konfirmasi email aktif, belum ada sesi.
       await _authService.signOut(); // Sign out to prevent auto-login
 
       _user = null;
@@ -99,8 +104,8 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return true;
-    } on FirebaseAuthException catch (e) {
-      _error = _getAuthErrorMessage(e.code);
+    } on AuthException catch (e) {
+      _error = _getAuthErrorMessage(e.message);
       _isRegistering = false;
       _isLoading = false;
       notifyListeners();
@@ -125,8 +130,8 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return credential != null;
-    } on FirebaseAuthException catch (e) {
-      _error = _getAuthErrorMessage(e.code);
+    } on AuthException catch (e) {
+      _error = _getAuthErrorMessage(e.message);
       _isLoading = false;
       notifyListeners();
       return false;
@@ -149,8 +154,8 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return credential != null;
-    } on FirebaseAuthException catch (e) {
-      _error = _getAuthErrorMessage(e.code);
+    } on AuthException catch (e) {
+      _error = _getAuthErrorMessage(e.message);
       _isLoading = false;
       notifyListeners();
       return false;
@@ -213,12 +218,8 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return true;
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'requires-recent-login') {
-        _error = 'Silakan keluar dan login kembali sebelum menghapus akun demi keamanan.';
-      } else {
-        _error = _getAuthErrorMessage(e.code);
-      }
+    } on AuthException catch (e) {
+      _error = _getAuthErrorMessage(e.message);
       _isLoading = false;
       notifyListeners();
       return false;
@@ -242,8 +243,8 @@ class AuthProvider extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
       return true;
-    } on FirebaseAuthException catch (e) {
-      _error = _getAuthErrorMessage(e.code);
+    } on AuthException catch (e) {
+      _error = _getAuthErrorMessage(e.message);
       _isLoading = false;
       notifyListeners();
       return false;
@@ -255,7 +256,7 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
-  /// Memuat profil user dari Firestore.
+  /// Memuat profil user dari Supabase.
   Future<void> _loadUserProfile(String uid) async {
     try {
       _userProfile = await _authService.getUserProfile(uid);
@@ -292,25 +293,27 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  String _getAuthErrorMessage(String code) {
-    switch (code) {
-      case 'user-not-found':
-      case 'wrong-password':
-      case 'invalid-credential':
-        return 'Incorrect email or password.';
-      case 'email-already-in-use':
-        return 'This email is already registered.';
-      case 'weak-password':
-        return 'Password must be at least 6 characters.';
-      case 'invalid-email':
-        return 'The email format is not valid.';
-      case 'too-many-requests':
-        return 'Too many attempts. Please try again later.';
-      case 'network-request-failed':
-        return 'No internet connection.';
-      default:
-        return 'Something went wrong. Please try again.';
+  String _getAuthErrorMessage(String msg) {
+    final lower = msg.toLowerCase();
+    if (lower.contains('email not confirmed')) {
+      return 'Email belum dikonfirmasi. Cek inbox email Anda atau matikan opsi Confirm Email di Dashboard Supabase.';
+    } else if (lower.contains('invalid login credentials') ||
+        lower.contains('invalid email or password') ||
+        lower.contains('wrong password')) {
+      return 'Email atau kata sandi salah.';
+    } else if (lower.contains('already registered') || lower.contains('user already exists')) {
+      return 'Email ini sudah terdaftar.';
+    } else if (lower.contains('password should be at least 6 characters') ||
+        lower.contains('weak password')) {
+      return 'Kata sandi minimal 6 karakter.';
+    } else if (lower.contains('invalid email') || lower.contains('unable to validate email')) {
+      return 'Format email tidak valid.';
+    } else if (lower.contains('rate limit') || lower.contains('too many requests')) {
+      return 'Terlalu banyak percobaan. Silakan coba sesaat lagi.';
+    } else if (lower.contains('network') || lower.contains('connection')) {
+      return 'Tidak ada koneksi internet.';
     }
+    return msg;
   }
 
   @override

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'supabase_config.dart';
 import 'pages/login_page.dart';
 import 'pages/main_page.dart';
 import 'pages/onboarding_page.dart';
@@ -45,18 +46,11 @@ class _AuthWrapperState extends State<AuthWrapper> {
       );
     }
 
-    return StreamBuilder<User?>(
-      stream: FirebaseAuth.instance.authStateChanges(),
+    return StreamBuilder<AuthState>(
+      stream: SupabaseConfig.client.auth.onAuthStateChange,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(),
-            ),
-          );
-        }
-
-        if (snapshot.hasData && snapshot.data != null) {
+        final session = SupabaseConfig.client.auth.currentSession;
+        if (session != null) {
           return const MainPage();
         }
 

@@ -84,7 +84,7 @@ class PrivacyPolicyPage extends StatelessWidget {
             _buildSection(
               theme,
               '5. Penyimpanan & Keamanan Data',
-              'Data Anda disimpan secara aman menggunakan Firebase (Google Cloud Platform) '
+              'Data Anda disimpan secara aman menggunakan infrastruktur database Supabase '
                   'dengan enkripsi standar industri. Kami menerapkan langkah-langkah keamanan '
                   'yang wajar untuk melindungi data Anda dari akses tidak sah.',
             ),

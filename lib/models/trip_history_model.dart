@@ -1,9 +1,8 @@
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:latlong2/latlong.dart';
 
-/// Model data yang merepresentasikan riwayat perjalanan di koleksi Firestore `trip_history`.
+/// Model data yang merepresentasikan riwayat perjalanan.
 class TripHistoryModel {
-  /// Unique Identifier riwayat perjalanan / dokumen Firestore
+  /// Unique Identifier riwayat perjalanan
   final String id;
 
   /// Nama grup perjalanan
@@ -59,49 +58,64 @@ class TripHistoryModel {
       .map((point) => LatLng(point['lat'] ?? 0.0, point['lng'] ?? 0.0))
       .toList();
 
-  /// Membuat instance [TripHistoryModel] dari Firestore [DocumentSnapshot]
-  factory TripHistoryModel.fromFirestore(DocumentSnapshot doc) {
-    final data = doc.data() as Map<String, dynamic>? ?? {};
-    return TripHistoryModel.fromMap(data, doc.id);
-  }
-
   /// Membuat instance [TripHistoryModel] dari generic [Map]
   factory TripHistoryModel.fromMap(Map<String, dynamic> map, [String? id]) {
     return TripHistoryModel(
       id: id ?? map['id'] as String? ?? '',
-      groupName: map['groupName'] as String? ?? '',
-      groupType: map['groupType'] as String? ?? 'motor',
-      distanceKm: (map['distanceKm'] as num?)?.toDouble() ?? 0.0,
+      groupName: map['group_name'] as String? ?? map['groupName'] as String? ?? '',
+      groupType: map['group_type'] as String? ?? map['groupType'] as String? ?? 'motor',
+      distanceKm: (map['distance_km'] ?? map['distanceKm'] as num?)?.toDouble() ?? 0.0,
       duration: map['duration'] as String? ?? '',
-      routePath: _parseRoutePath(map['routePath']),
-      memberCount: (map['memberCount'] as num?)?.toInt() ?? 0,
-      startedAt: _parseDateTime(map['startedAt']),
-      endedAt: _parseDateTime(map['endedAt']),
-      journalNote: map['journalNote'] as String? ?? map['note'] as String?,
+      routePath: _parseRoutePath(map['route_path'] ?? map['routePath']),
+      memberCount: (map['member_count'] ?? map['memberCount'] as num?)?.toInt() ?? 0,
+      startedAt: _parseDateTime(map['started_at'] ?? map['startedAt']),
+      endedAt: _parseDateTime(map['ended_at'] ?? map['endedAt']),
+      journalNote: map['journal_note'] as String? ?? map['journalNote'] as String? ?? map['note'] as String?,
       rating: (map['rating'] as num?)?.toDouble(),
     );
   }
 
-  /// Mengonversi instance ke bentuk Map untuk Firestore
-  Map<String, dynamic> toFirestore() {
+  /// Mengonversi instance ke bentuk Map
+  Map<String, dynamic> toMap() {
     return {
-      'id': id,
+      if (id.isNotEmpty) 'id': id,
+      'group_name': groupName,
       'groupName': groupName,
+      'group_type': groupType,
       'groupType': groupType,
+      'distance_km': distanceKm,
       'distanceKm': distanceKm,
       'duration': duration,
+      'route_path': routePath,
       'routePath': routePath,
+      'member_count': memberCount,
       'memberCount': memberCount,
-      'startedAt': Timestamp.fromDate(startedAt),
-      'endedAt': Timestamp.fromDate(endedAt),
+      'started_at': startedAt.toIso8601String(),
+      'startedAt': startedAt.toIso8601String(),
+      'ended_at': endedAt.toIso8601String(),
+      'endedAt': endedAt.toIso8601String(),
+      'journal_note': journalNote,
       'journalNote': journalNote,
       'note': journalNote,
       'rating': rating,
     };
   }
 
-  /// Alias untuk [toFirestore] guna kompatibilitas umum
-  Map<String, dynamic> toMap() => toFirestore();
+  /// Alias untuk toMap
+  Map<String, dynamic> toFirestore() => toMap();
+  Map<String, dynamic> toSupabase() => {
+        if (id.isNotEmpty) 'id': id,
+        'group_name': groupName,
+        'group_type': groupType,
+        'distance_km': distanceKm,
+        'duration': duration,
+        'route_path': routePath,
+        'member_count': memberCount,
+        'started_at': startedAt.toIso8601String(),
+        'ended_at': endedAt.toIso8601String(),
+        'journal_note': journalNote,
+        'rating': rating,
+      };
 
   /// Membuat salinan objek dengan perubahan nilai parsial
   TripHistoryModel copyWith({
@@ -149,12 +163,17 @@ class TripHistoryModel {
 
   /// Helper untuk mem-parsing format DateTime
   static DateTime _parseDateTime(dynamic value) {
-    if (value is Timestamp) {
-      return value.toDate();
+    if (value is DateTime) {
+      return value;
     } else if (value is String) {
       return DateTime.tryParse(value) ?? DateTime.now();
     } else if (value is int) {
       return DateTime.fromMillisecondsSinceEpoch(value);
+    } else if (value != null && value.toString().contains('Timestamp')) {
+      try {
+        final seconds = (value as dynamic).seconds as int;
+        return DateTime.fromMillisecondsSinceEpoch(seconds * 1000);
+      } catch (_) {}
     }
     return DateTime.now();
   }
