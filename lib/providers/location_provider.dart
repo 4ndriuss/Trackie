@@ -5,10 +5,12 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/location_service.dart';
 import '../services/background_location_service.dart';
 import '../services/permission_service.dart';
 import '../models/location_model.dart';
+import '../supabase_config.dart';
 
 /// [LocationProvider] mengelola:
 /// - Stream lokasi anggota grup dari Supabase Realtime Broadcast
@@ -19,6 +21,8 @@ class LocationProvider extends ChangeNotifier {
 
   List<MemberLocation> _members = [];
   StreamSubscription? _locationSubscription;
+  StreamSubscription<AuthState>? _authSubscription;
+  Timer? _tokenRefreshTimer;
   Position? _currentPosition;
   bool _isTracking = false;
   bool _permissionsGranted = false;
@@ -71,14 +75,54 @@ class LocationProvider extends ChangeNotifier {
           groupId: groupId,
           uid: uid,
           userName: userName,
+          accessToken: SupabaseConfig.client.auth.currentSession?.accessToken,
           tripName: tripName,
         );
+        _startTokenSync();
       } catch (e) {
         debugPrint('Error starting background service: $e');
       }
     }
 
     notifyListeners();
+  }
+
+  /// Sinkronkan access token ke background isolate selama tracking.
+  /// Private channel diputus server saat JWT kedaluwarsa, sementara
+  /// supabase_flutter menghentikan auto-refresh ketika app di-background.
+  void _startTokenSync() {
+    _stopTokenSync();
+    final auth = SupabaseConfig.client.auth;
+
+    _authSubscription = auth.onAuthStateChange.listen((data) {
+      final token = data.session?.accessToken;
+      if (token != null &&
+          (data.event == AuthChangeEvent.tokenRefreshed ||
+              data.event == AuthChangeEvent.signedIn)) {
+        BackgroundLocationService.updateAccessToken(token);
+      }
+    });
+
+    _tokenRefreshTimer = Timer.periodic(const Duration(minutes: 5), (_) async {
+      final expiresAt = auth.currentSession?.expiresAt;
+      if (expiresAt == null) return;
+      final secondsLeft =
+          expiresAt - DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      if (secondsLeft < 600) {
+        try {
+          await auth.refreshSession(); // memicu event tokenRefreshed di atas
+        } catch (e) {
+          debugPrint('Error refreshing session for tracking: $e');
+        }
+      }
+    });
+  }
+
+  void _stopTokenSync() {
+    _authSubscription?.cancel();
+    _authSubscription = null;
+    _tokenRefreshTimer?.cancel();
+    _tokenRefreshTimer = null;
   }
 
   /// Hentikan semua tracking (stream + background service).
@@ -96,6 +140,7 @@ class LocationProvider extends ChangeNotifier {
     }
 
     // Stop background service
+    _stopTokenSync();
     if (!kIsWeb) {
       try {
         await BackgroundLocationService.stopTracking();
@@ -177,6 +222,7 @@ class LocationProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _stopTokenSync();
     stopListening();
     super.dispose();
   }

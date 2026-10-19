@@ -11,6 +11,10 @@ import '../supabase_config.dart';
 /// [LocationService] mengelola transmisi koordinat GPS secara real-time
 /// menggunakan Supabase Realtime Channels (Broadcast event).
 class LocationService {
+  /// Nama topic Realtime untuk grup. Format ini HARUS sama dengan yang
+  /// diperiksa fungsi SQL `public.can_access_tracking_topic`.
+  static String trackingTopic(String groupId) => 'group_tracking:$groupId';
+
   SupabaseClient get _supabase => SupabaseConfig.client;
 
   RealtimeChannel? _channel;
@@ -85,7 +89,13 @@ class LocationService {
     _channel?.unsubscribe();
     _currentGroupId = groupId;
 
-    _channel = _supabase.channel('group_tracking:$groupId');
+    // Private channel: akses diotorisasi oleh RLS di `realtime.messages`
+    // (lihat supabase_schema.sql bagian 9) sehingga hanya anggota grup yang
+    // bisa mendengarkan/mengirim lokasi.
+    _channel = _supabase.channel(
+      trackingTopic(groupId),
+      opts: const RealtimeChannelConfig(private: true),
+    );
 
     _channel!
         .onBroadcast(

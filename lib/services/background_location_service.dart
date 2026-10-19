@@ -11,6 +11,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../supabase_config.dart';
+import 'location_service.dart';
 
 /// [BackgroundLocationService] mengelola lifecycle background tracking.
 /// Saat tracking dimulai, service ini:
@@ -67,6 +68,7 @@ class BackgroundLocationService {
     required String groupId,
     required String uid,
     required String userName,
+    required String? accessToken,
     String? tripName,
   }) async {
     final service = FlutterBackgroundService();
@@ -78,7 +80,16 @@ class BackgroundLocationService {
       'uid': uid,
       'userName': userName,
       'tripName': tripName ?? 'Perjalanan',
+      'accessToken': accessToken,
     });
+  }
+
+  /// Kirim access token terbaru ke background isolate.
+  /// Wajib dipanggil setiap kali sesi di-refresh, karena private channel
+  /// akan diputus oleh server ketika JWT kedaluwarsa.
+  static void updateAccessToken(String accessToken) {
+    final service = FlutterBackgroundService();
+    service.invoke('updateToken', {'accessToken': accessToken});
   }
 
   /// Perbarui status anggota di background isolate (misal: 'sos' atau 'online')
@@ -113,8 +124,17 @@ class BackgroundLocationService {
 Future<void> _onStart(ServiceInstance service) async {
   DartPluginRegistrant.ensureInitialized();
 
-  // Inisialisasi client Supabase untuk background isolate
-  final supabase = SupabaseClient(SupabaseConfig.url, SupabaseConfig.anonKey);
+  // Access token (JWT) user, dikirim dari main isolate. Background isolate
+  // sengaja TIDAK memegang refresh token agar tidak terjadi rotasi ganda
+  // yang bisa membuat Supabase mencabut sesi.
+  String? accessToken;
+
+  // Inisialisasi client Supabase untuk background isolate (terautentikasi)
+  final supabase = SupabaseClient(
+    SupabaseConfig.url,
+    SupabaseConfig.anonKey,
+    accessToken: () async => accessToken,
+  );
 
   String? groupId;
   String? uid;
@@ -122,6 +142,18 @@ Future<void> _onStart(ServiceInstance service) async {
   String currentStatus = 'online';
   Timer? locationTimer;
   RealtimeChannel? trackingChannel;
+
+  // Listen pembaruan token dari main isolate (setelah sesi di-refresh)
+  service.on('updateToken').listen((event) async {
+    final token = event?['accessToken'] as String?;
+    if (token == null || token.isEmpty) return;
+    accessToken = token;
+    try {
+      await supabase.realtime.setAuth(token);
+    } catch (e) {
+      debugPrint('Failed to update realtime auth in background: $e');
+    }
+  });
 
   // Listen perubahan status (misal: SOS)
   service.on('setStatus').listen((event) {
@@ -136,6 +168,7 @@ Future<void> _onStart(ServiceInstance service) async {
     groupId = event?['groupId'];
     uid = event?['uid'];
     userName = event?['userName'];
+    accessToken = (event?['accessToken'] as String?) ?? accessToken;
     currentStatus = 'online';
     final tripName = event?['tripName'] ?? 'Perjalanan';
 
@@ -148,9 +181,20 @@ Future<void> _onStart(ServiceInstance service) async {
     }
 
     if (groupId != null) {
-      trackingChannel?.unsubscribe();
-      trackingChannel = supabase.channel('group_tracking:$groupId');
-      trackingChannel?.subscribe();
+      await trackingChannel?.unsubscribe();
+      trackingChannel = null;
+
+      if (accessToken == null) {
+        // Private channel menolak koneksi anonim.
+        debugPrint('Background tracking skipped: no access token');
+      } else {
+        await supabase.realtime.setAuth(accessToken);
+        trackingChannel = supabase.channel(
+          LocationService.trackingTopic(groupId!),
+          opts: const RealtimeChannelConfig(private: true),
+        );
+        trackingChannel?.subscribe();
+      }
     }
 
     // Mulai kirim lokasi setiap 5 detik

@@ -49,6 +49,13 @@ app.*.map.json
 
 # Secrets & Config
 lib/supabase_config.dart
+lib/firebase_options.dart
+**/google-services.json
+**/GoogleService-Info.plist
+android/key.properties
+*.jks
+*.keystore
+*.p12
 *.env
 .env
 

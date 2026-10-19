@@ -324,3 +324,57 @@ BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE public.trip_history;
   END IF;
 END $$;
+
+-- 9. Otorisasi Realtime Broadcast (Private Channel) untuk Live Tracking
+-- Client memakai channel private 'group_tracking:<group_id>'.
+-- Hanya anggota grup yang masih aktif yang boleh join, menerima, dan mengirim.
+-- PENTING: Matikan "Allow public access" di Dashboard -> Realtime -> Settings
+-- agar channel non-private (yang melewati RLS ini) ditolak oleh server.
+CREATE OR REPLACE FUNCTION public.can_access_tracking_topic(p_topic text)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_group_id uuid;
+BEGIN
+  IF p_topic IS NULL OR p_topic NOT LIKE 'group_tracking:%' THEN
+    RETURN false;
+  END IF;
+
+  BEGIN
+    v_group_id := substring(p_topic FROM 16)::uuid; -- panjang 'group_tracking:' = 15
+  EXCEPTION WHEN invalid_text_representation THEN
+    RETURN false;
+  END;
+
+  RETURN EXISTS (
+    SELECT 1 FROM public.groups g
+     WHERE g.id = v_group_id
+       AND g.status = 'active'
+       AND (SELECT auth.uid())::text = ANY (g.member_uids)
+  );
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.can_access_tracking_topic(text) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.can_access_tracking_topic(text) TO authenticated;
+
+DROP POLICY IF EXISTS "tracking_members_receive" ON realtime.messages;
+DROP POLICY IF EXISTS "tracking_members_send"    ON realtime.messages;
+
+CREATE POLICY "tracking_members_receive" ON realtime.messages
+  FOR SELECT TO authenticated
+  USING (
+    realtime.messages.extension = 'broadcast'
+    AND public.can_access_tracking_topic((SELECT realtime.topic()))
+  );
+
+CREATE POLICY "tracking_members_send" ON realtime.messages
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    realtime.messages.extension = 'broadcast'
+    AND public.can_access_tracking_topic((SELECT realtime.topic()))
+  );

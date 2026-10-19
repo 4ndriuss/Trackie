@@ -2,7 +2,7 @@
 
 **Trackie** is a cross-platform mobile application built with **Flutter**, specifically designed to facilitate coordination, real-time location tracking, and safety for road trip groups (*group touring*, *Sunmori* / Sunday morning rides, car convoys, and cycling clubs).
 
-Powered by **Google Maps**, **Firebase Realtime Database**, and a **Background Foreground Service**, Trackie enables every group member to monitor each other's live positions, connection statuses, and inter-rider distances in real time—even when the phone screen is locked or the app is running in the background.
+Powered by **OpenStreetMap** (`flutter_map`), **Supabase** (Auth, PostgreSQL, Storage & Realtime), and a **Background Foreground Service**, Trackie enables every group member to monitor each other's live positions, connection statuses, and inter-rider distances in real time—even when the phone screen is locked or the app is running in the background.
 
 ---
 
@@ -39,19 +39,19 @@ Acts as the central trip hub for creating new touring sessions as a *Host*, join
 - **Join Trip (`HomeTab`)**: Joins an active trip session using an invitation code shared by the *Host*.
 - **Active Trip Banner (`HomeTab`)**: Displays a quick-access banner on the home screen whenever the user is part of an ongoing trip session.
 - **Upcoming Trips (`HomeTab`)**: Lists scheduled future trips complete with meeting points, departure times, participant counts, and user roles (`Host` / `Member`).
-- **Automated Group Lifecycle Management (`GroupService`)**: Automatically transfers *Host* ownership to the next remaining member if the original host leaves early, and automatically closes the group (`status: 'ended'`) while cleaning up Realtime Database location nodes when the last member leaves.
+- **Automated Group Lifecycle Management (`GroupService`)**: Membership changes run through server-side Supabase RPCs (`join_group`, `leave_group`, `end_group`). Host ownership is automatically transferred to the next remaining member if the original host leaves early, and the group is automatically closed (`status: 'ended'`) when the last member leaves.
 - **Technical Components**: `MainPage`, `HomeTab`, `GroupProvider`, `GroupService`, `GroupModel`.
 
 ### 3. Real-Time Location Tracking, Interactive Map & SOS Module
 The core module responsible for visualizing group member positions on the map, broadcasting background GPS updates, calculating distances, and handling emergency alerts.
-- **Real-Time Map & Dynamic Status Markers (`MapPage`)**: Renders all group members on Google Maps with color-coded markers reflecting each rider's live state:
+- **Real-Time Map & Dynamic Status Markers (`MapPage`)**: Renders all group members on an OpenStreetMap map (`flutter_map`) with color-coded markers reflecting each rider's live state:
   - 🟢 **Green**: Member is *Online* / Connected
   - 🟠 **Orange (Dimmed)**: Member is *Offline* / Signal Lost
   - 🔴 **Red**: Member is in an emergency state (**SOS**)
 - **Inter-Member Distance Calculation (`HaversineUtils`)**: Computes the real-time great-circle distance between the user and every other group member in meters (`m`) or kilometers (`km`).
 - **Interactive Member Sheet (`DraggableScrollableSheet`)**: Displays a scrollable bottom sheet of all group members with their connection status and distance. Tapping a member smoothly animates the map camera to focus on their position.
-- **Emergency Signal / SOS Button (`MapPage` & `LocationProvider`)**: A floating emergency action button with a confirmation dialog that updates the user's status to `sos` in both Firebase RTDB and the background service isolate, triggering high-visibility alerts across all members' screens.
-- **Background Location Service (`BackgroundLocationService`)**: Runs in an isolated background thread with a persistent foreground notification to broadcast high-accuracy GPS coordinates every 5 seconds to Firebase RTDB (`active_locations/{groupId}/{uid}`) even when the device is locked.
+- **Emergency Signal / SOS Button (`MapPage` & `LocationProvider`)**: A floating emergency action button with a confirmation dialog that broadcasts the user's `sos` status to the group channel and the background service isolate, triggering high-visibility alerts across all members' screens.
+- **Background Location Service (`BackgroundLocationService`)**: Runs in an isolated background thread with a persistent foreground notification to broadcast high-accuracy GPS coordinates every 5 seconds over a **private Supabase Realtime Broadcast channel** (`group_tracking:{groupId}`) even when the device is locked. Only active group members are authorized (RLS on `realtime.messages`), and no database rows are written for live locations.
 - **Progressive Permission Management (`PermissionService`)**: Handles step-by-step permission requests for *Foreground Location* (*While Using*), *Background Location* (*Always Allow*), and *Notifications* in compliance with Android 12+/13+ and iOS policies.
 - **Technical Components**: `MapPage`, `LocationProvider`, `LocationService`, `BackgroundLocationService`, `PermissionService`, `HaversineUtils`, `MemberLocation`.
 
@@ -65,11 +65,11 @@ A trip documentation module for reviewing completed touring sessions and sharing
 ### 5. Profile, Account Settings, Privacy & Preferences Module
 A personalization module for managing rider identity, location privacy visibility, account security settings, and app appearance/language.
 - **Rider Profile & Statistics (`ProfileTab`)**: Displays the user's avatar/initials, full name, vehicle info, join date, summary statistics (*Routes*, *Tracked*, *Places*), and a *Tracking Streak Banner*.
-- **Profile Picture Upload & Validation (`AuthService.uploadProfilePicture`)**: Picks an image from the gallery with quality compression, validates file size (max 5 MB), and sanitizes file extensions (`JPG`, `PNG`, `WEBP`) before uploading to Firebase Storage.
+- **Profile Picture Upload & Validation (`AuthService.uploadProfilePicture`)**: Picks an image from the gallery with quality compression, validates file size (max 5 MB), and sanitizes file extensions (`JPG`, `PNG`, `WEBP`) before uploading to the Supabase Storage `avatars` bucket (each user can only write to their own folder).
 - **Ghost Mode (`ProfileTab`)**: A quick privacy toggle on the profile tab to hide the user's location visibility from the group map.
-- **Account Management & Security (`AccountPage`)**: Allows editing display name and vehicle details, requesting a password reset link via email, and permanently deleting the account (*Danger Zone*) along with its Firestore data.
+- **Account Management & Security (`AccountPage`)**: Allows editing display name and vehicle details, requesting a password reset link via email, and permanently deleting the account (*Danger Zone*) along with all related data (via the `delete_my_account` RPC).
 - **Language & Theme Preferences (`PreferencesPage`)**: Enables real-time language switching between **Indonesian (`id`)** and **English (`en`)**, as well as theme mode selection (**Light Mode**, **Dark Mode**, or **System Default**).
-- **Privacy Policy (`PrivacyPolicyPage`)**: Provides transparent documentation on account data collection, GPS usage, Firebase storage security, and user privacy rights.
+- **Privacy Policy (`PrivacyPolicyPage`)**: Provides transparent documentation on account data collection, GPS usage, data storage security, and user privacy rights.
 - **Technical Components**: `ProfileTab`, `AccountPage`, `PreferencesPage`, `PrivacyPolicyPage`, `LocaleProvider`, `AppTheme`.
 
 ---
@@ -90,13 +90,13 @@ A personalization module for managing rider identity, location privacy visibilit
 
 - **Framework & Language**: Flutter (Dart `^3.13.3`), Material Design 3
 - **State Management**: `provider` (`ChangeNotifier`)
-- **Backend & Cloud Services (Firebase)**:
-  - `firebase_auth` (`google_sign_in`, `flutter_facebook_auth`) — Multi-provider authentication
-  - `cloud_firestore` — Document storage for user profiles (`users`) and trip groups (`groups`)
-  - `firebase_database` — Low-latency real-time GPS coordinate streaming (`active_locations`)
-  - `firebase_storage` — Cloud storage for user profile avatars
+- **Backend & Cloud Services (Supabase)** — `supabase_flutter`:
+  - **Auth** (`google_sign_in`, `flutter_facebook_auth`) — Email/password + social sign-in
+  - **PostgreSQL + RLS** — `profiles`, `groups`, `trip_history` tables with Row Level Security and server-side RPCs (see `supabase_schema.sql`)
+  - **Realtime Broadcast (private channels)** — Low-latency live GPS streaming between group members
+  - **Storage** — `avatars` bucket for user profile pictures
 - **Maps, Geolocation & Background Execution**:
-  - `google_maps_flutter` — Interactive map rendering, dynamic markers, and route polylines
+  - `flutter_map` + `latlong2` — OpenStreetMap rendering, dynamic markers, and route polylines
   - `geolocator` — High-accuracy device GPS positioning
   - `flutter_background_service` & `flutter_local_notifications` — Persistent foreground service for background tracking
   - `permission_handler` — Step-by-step location and notification permission handling
@@ -111,10 +111,11 @@ A personalization module for managing rider identity, location privacy visibilit
 lib/
 ├── l10n/                          # Localization files (Indonesian & English)
 ├── models/                        # Data models
-│   ├── group_model.dart           # Trip group data model (Firestore)
-│   ├── location_model.dart        # Member GPS coordinate & status model (RTDB)
+│   ├── group_model.dart           # Trip group data model (Supabase PostgreSQL)
+│   ├── location_model.dart        # Member GPS coordinate & status model (Realtime Broadcast)
 │   ├── onboarding_item.dart       # Onboarding slide content model
-│   └── user_model.dart            # User profile data model (Firestore)
+│   ├── trip_history_model.dart    # Completed trip history & route path model
+│   └── user_model.dart            # User profile data model (Supabase profiles)
 ├── pages/                         # UI Screens & Tabs
 │   ├── account_page.dart          # Account details, password reset, & account deletion
 │   ├── history_tab.dart           # Completed trip history list tab
@@ -132,18 +133,19 @@ lib/
 │   ├── auth_provider.dart         # Authentication & user profile state
 │   ├── group_provider.dart        # Active trip group state
 │   ├── locale_provider.dart       # Active locale state (id / en)
-│   └── location_provider.dart     # RTDB location stream & background tracking state
-├── services/                      # Business logic & external integrations (Firebase / OS)
-│   ├── auth_service.dart          # Firebase Auth, Firestore Users, & Storage integration
+│   └── location_provider.dart     # Realtime location stream, token sync & background tracking state
+├── services/                      # Business logic & external integrations (Supabase / OS)
+│   ├── auth_service.dart          # Supabase Auth, Profiles, & Storage integration
 │   ├── background_location_service.dart # Background isolate & foreground notification service
-│   ├── group_service.dart         # Group CRUD operations & unique invite code generator
+│   ├── group_service.dart         # Group CRUD & RPC operations + unique invite code generator
 │   ├── haversine_utils.dart       # Great-circle distance calculator between GPS coordinates
-│   ├── location_service.dart      # Firebase RTDB location broadcasting & streaming
-│   └── permission_service.dart    # Foreground/background location & notification permissions
+│   ├── location_service.dart      # Private Supabase Realtime Broadcast location streaming
+│   ├── permission_service.dart    # Foreground/background location & notification permissions
+│   └── trip_service.dart          # Trip history persistence & retrieval service
 ├── theme/                         # App color palette, typography, & light/dark themes
 ├── widgets/                       # Reusable UI components (buttons, text fields, dialogs)
 ├── app.dart                       # AuthWrapper (initial route guard)
-├── firebase_options.dart          # Platform-specific Firebase configuration
+├── supabase_config.example.dart   # Template for Supabase URL & Anon Key configuration
 └── main.dart                      # Application entry point & service initialization
 ```
 
@@ -154,16 +156,17 @@ lib/
 1. **Prerequisites**:
    - Flutter SDK (`^3.13.3`)
    - Android Studio / VS Code
-   - Firebase project configuration & Google Maps API Key.
+   - A Supabase project
 
 2. **Install Dependencies**:
    ```bash
    flutter pub get
    ```
 
-3. **Configure Firebase & Google Maps**:
-   - Run `flutterfire configure` to generate `lib/firebase_options.dart` and `android/app/google-services.json` (or copy `lib/firebase_options.example.dart` to `lib/firebase_options.dart` and fill in your credentials).
-   - Replace `API_KEY_ANDA_DISINI` in `android/app/src/main/AndroidManifest.xml` with your Google Maps SDK API Key.
+3. **Configure Supabase**:
+   - Copy `lib/supabase_config.example.dart` to `lib/supabase_config.dart` and fill in your `SUPABASE_URL` and `SUPABASE_ANON_KEY` (or pass them via `--dart-define`).
+   - Run the SQL script in [`supabase_schema.sql`](supabase_schema.sql) inside **Supabase Dashboard → SQL Editor** to set up tables, triggers, RPCs, storage buckets, and Row Level Security (including private Realtime Broadcast policies).
+   - In **Supabase Dashboard → Project Settings → Realtime**, disable **"Allow public access"** so only private, RLS-authorized channels are permitted.
 
 4. **Run the Application**:
    ```bash
