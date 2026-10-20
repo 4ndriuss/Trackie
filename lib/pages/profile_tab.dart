@@ -7,6 +7,8 @@ import 'package:intl/intl.dart';
 
 import '../theme/app_theme.dart';
 import '../providers/auth_provider.dart';
+import '../providers/group_provider.dart';
+import '../providers/location_provider.dart';
 import '../providers/subscription_provider.dart';
 import 'privacy_policy_page.dart';
 import 'preferences_page.dart';
@@ -37,6 +39,14 @@ class _ProfileTabState extends State<ProfileTab> {
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
+              final locationProvider = context.read<LocationProvider>();
+              final groupProvider = context.read<GroupProvider>();
+              await locationProvider.stopTracking(
+                groupId: groupProvider.activeGroup?.id,
+                uid: context.read<AuthProvider>().user?.uid,
+              );
+              groupProvider.clearActiveGroup();
+              if (!context.mounted) return;
               await context.read<AuthProvider>().logout();
               if (context.mounted) {
                 Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);

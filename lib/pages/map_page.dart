@@ -96,6 +96,8 @@ class _MapPageState extends State<MapPage> {
   bool _hasFittedInitialRoute = false;
   bool _isPickingDestinationOnMap = false;
   bool _isSettingPin = false;
+  bool _canPopNow = false;
+  StreamSubscription<String>? _groupEndedSubscription;
 
   @override
   void initState() {
@@ -107,6 +109,7 @@ class _MapPageState extends State<MapPage> {
 
   @override
   void dispose() {
+    _groupEndedSubscription?.cancel();
     _mapController.dispose();
     super.dispose();
   }
@@ -139,6 +142,15 @@ class _MapPageState extends State<MapPage> {
 
     final displayName =
         authProvider.userProfile?.name ?? currentUser.displayName ?? 'Anda';
+
+    _groupEndedSubscription?.cancel();
+    _groupEndedSubscription = locationProvider.onGroupEnded.listen((endedGroupId) async {
+      if (!mounted) return;
+      final currentGroup = context.read<GroupProvider>().activeGroup;
+      if (currentGroup?.id == endedGroupId || currentGroup == null) {
+        await _handleGroupEndedByHost();
+      }
+    });
 
     await locationProvider.startTracking(
       groupId: activeGroup.id,
@@ -827,10 +839,19 @@ class _MapPageState extends State<MapPage> {
         }
       }
 
-      // 2. Hentikan tracking lokasi
+      // 2. Siarkan event group_ended jika Host, agar semua anggota langsung terinfo
+      if (isHost && groupId != null) {
+        try {
+          await locationProvider.broadcastGroupEnded(groupId);
+        } catch (e) {
+          debugPrint('Error broadcasting group_ended: $e');
+        }
+      }
+
+      // 3. Hentikan tracking lokasi
       await locationProvider.stopTracking(groupId: groupId, uid: uid);
 
-      // 3. Akhiri grup (jika Host) atau keluar grup (jika Member)
+      // 4. Akhiri grup (jika Host) atau keluar grup (jika Member)
       if (uid != null && groupId != null) {
         if (isHost) {
           await groupProvider.endGroup();
@@ -846,8 +867,51 @@ class _MapPageState extends State<MapPage> {
             behavior: SnackBarBehavior.floating,
           ),
         );
+        setState(() => _canPopNow = true);
         Navigator.pop(context);
       }
+    }
+  }
+
+  /// Ditangani ketika Host menyelesaikan perjalanan dan menyiarkan event group_ended.
+  /// Anggota rombongan otomatis menyimpan riwayat, menghentikan tracking, dan keluar ke Home.
+  Future<void> _handleGroupEndedByHost() async {
+    final authProvider = context.read<AuthProvider>();
+    final groupProvider = context.read<GroupProvider>();
+    final locationProvider = context.read<LocationProvider>();
+
+    final activeGroup = groupProvider.activeGroup;
+    final uid = authProvider.user?.uid;
+
+    if (uid != null && activeGroup != null) {
+      try {
+        final completedTrip = locationProvider.buildCompletedTripHistory(
+          groupName: activeGroup.name,
+          rawDestination: activeGroup.destination,
+          groupType: activeGroup.type,
+          isHost: false,
+          fallbackMemberCount: activeGroup.memberCount,
+          groupCreatedAt: activeGroup.createdAt,
+        );
+        await TripService().saveTrip(uid: uid, trip: completedTrip);
+      } catch (e) {
+        debugPrint('Error saving member trip history on remote group end: $e');
+      }
+    }
+
+    await locationProvider.stopTracking(groupId: activeGroup?.id, uid: uid);
+    groupProvider.clearActiveGroup();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Perjalanan telah diakhiri oleh Host. Riwayat Anda telah disimpan.'),
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 4),
+        ),
+      );
+      setState(() => _canPopNow = true);
+      Navigator.of(context).pop();
     }
   }
 
@@ -924,18 +988,28 @@ class _MapPageState extends State<MapPage> {
     final destinationTarget = locationProvider.destinationTarget;
     final activeRoute = locationProvider.activeRoute;
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Peta & Navigasi Rute'),
-        actions: [
-          if (widget.isHost)
-            IconButton(
-              tooltip: 'Bagikan kode undangan',
-              icon: const Icon(Icons.share),
-              onPressed: _showInviteCode,
-            ),
-        ],
-      ),
+    return PopScope(
+      canPop: _canPopNow,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _confirmLeave();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: _confirmLeave,
+          ),
+          title: const Text('Peta & Navigasi Rute'),
+          actions: [
+            if (widget.isHost)
+              IconButton(
+                tooltip: 'Bagikan kode undangan',
+                icon: const Icon(Icons.share),
+                onPressed: _showInviteCode,
+              ),
+          ],
+        ),
       body: LayoutBuilder(
         builder: (context, constraints) {
           return Stack(
@@ -1182,7 +1256,7 @@ class _MapPageState extends State<MapPage> {
           );
         },
       ),
-    );
+    ),);
   }
 }
 

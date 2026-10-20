@@ -108,6 +108,12 @@ class GroupProvider extends ChangeNotifier {
     }
   }
 
+  /// Mengosongkan grup aktif secara lokal saat perjalanan diakhiri atau user logout.
+  void clearActiveGroup() {
+    _activeGroup = null;
+    notifyListeners();
+  }
+
   // Load active group for user
   Future<void> loadActiveGroup(String uid) async {
     try {

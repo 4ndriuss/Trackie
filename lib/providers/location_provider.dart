@@ -543,6 +543,14 @@ class LocationProvider extends ChangeNotifier {
     _tokenRefreshTimer = null;
   }
 
+  /// Stream notifikasi saat Host mengakhiri grup.
+  Stream<String> get onGroupEnded => _locationService.onGroupEnded;
+
+  /// Broadcast sinyal bahwa Host telah menyelesaikan perjalanan grup.
+  Future<void> broadcastGroupEnded(String groupId) async {
+    await _locationService.broadcastGroupEnded(groupId);
+  }
+
   /// Hentikan semua tracking (stream + background service).
   Future<void> stopTracking({
     String? groupId,

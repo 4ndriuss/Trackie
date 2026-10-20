@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../providers/auth_provider.dart';
+import '../providers/group_provider.dart';
+import '../providers/location_provider.dart';
 
 /// [AccountPage] menampilkan halaman pengaturan akun pengguna.
 /// Menyediakan fitur edit profil, ubah password, dan hapus akun.
@@ -336,6 +338,14 @@ class _AccountPageState extends State<AccountPage> {
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
+              final locationProvider = context.read<LocationProvider>();
+              final groupProvider = context.read<GroupProvider>();
+              await locationProvider.stopTracking(
+                groupId: groupProvider.activeGroup?.id,
+                uid: context.read<AuthProvider>().user?.uid,
+              );
+              groupProvider.clearActiveGroup();
+              if (!context.mounted) return;
               final authProvider = context.read<AuthProvider>();
               final success = await authProvider.deleteAccount();
               if (!context.mounted) return;

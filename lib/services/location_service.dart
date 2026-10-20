@@ -24,6 +24,13 @@ class LocationService {
   DestinationTarget? _groupDestination;
   StreamController<List<MemberLocation>>? _locationStreamController;
   StreamController<DestinationTarget?>? _destinationStreamController;
+  StreamController<String>? _groupEndedStreamController;
+
+  /// Stream notifikasi saat grup telah diakhiri oleh Host.
+  Stream<String> get onGroupEnded {
+    _groupEndedStreamController ??= StreamController<String>.broadcast();
+    return _groupEndedStreamController!.stream;
+  }
 
   /// Broadcast lokasi pengguna ke channel Supabase grup.
   /// Event: 'location_update'
@@ -213,6 +220,18 @@ class LocationService {
             }
           },
         )
+        .onBroadcast(
+          event: 'group_ended',
+          callback: (message) {
+            try {
+              final data = _unwrap(message);
+              final endedGroupId = data?['group_id'] as String? ?? groupId;
+              _groupEndedStreamController?.add(endedGroupId);
+            } catch (e) {
+              debugPrint('Error handling group_ended broadcast: $e');
+            }
+          },
+        )
         .subscribe((status, error) {
       if (status == RealtimeSubscribeStatus.subscribed) {
         final myUid = _supabase.auth.currentUser?.id;
@@ -316,6 +335,22 @@ class LocationService {
     _channel?.unsubscribe();
     _channel = null;
     _currentGroupId = null;
+  }
+
+  /// Broadcast event bahwa perjalanan grup telah diakhiri oleh Host.
+  Future<void> broadcastGroupEnded(String groupId) async {
+    final channel = _ensureChannel(groupId);
+    try {
+      await channel.sendBroadcastMessage(
+        event: 'group_ended',
+        payload: {
+          'group_id': groupId,
+          'timestamp': DateTime.now().toIso8601String(),
+        },
+      );
+    } catch (e) {
+      debugPrint('Error broadcasting group_ended: $e');
+    }
   }
 
   /// Aktifkan sinyal SOS untuk user.
