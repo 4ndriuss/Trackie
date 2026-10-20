@@ -2,6 +2,7 @@
 // Service untuk menangani izin lokasi secara bertahap.
 // Android 12+ memerlukan izin lokasi "While Using" terlebih dahulu,
 // baru kemudian bisa meminta "Always Allow" (background location).
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -12,13 +13,11 @@ class PermissionService {
   /// Minta izin lokasi dasar (foreground / "While Using").
   /// Mengembalikan true jika izin diberikan.
   static Future<bool> requestLocationPermission() async {
-    // Cek apakah layanan lokasi aktif
     final serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) {
       return false;
     }
 
-    // Cek status izin saat ini
     var permission = await Geolocator.checkPermission();
 
     if (permission == LocationPermission.denied) {
@@ -37,38 +36,44 @@ class PermissionService {
 
   /// Minta izin lokasi background ("Always Allow").
   /// Harus dipanggil SETELAH izin foreground diberikan.
-  /// Mengembalikan true jika izin diberikan.
   static Future<bool> requestBackgroundLocationPermission() async {
-    // Pastikan foreground permission sudah diberikan terlebih dahulu
     final foregroundGranted = await requestLocationPermission();
     if (!foregroundGranted) return false;
+    if (kIsWeb) return true;
 
-    // Minta background location permission
-    final status = await Permission.locationAlways.request();
-    return status.isGranted;
+    try {
+      final status = await Permission.locationAlways.request();
+      return status.isGranted;
+    } catch (_) {
+      return foregroundGranted;
+    }
   }
 
   /// Minta izin notifikasi (Android 13+).
-  /// Mengembalikan true jika izin diberikan.
   static Future<bool> requestNotificationPermission() async {
-    final status = await Permission.notification.request();
-    return status.isGranted;
+    if (kIsWeb) return true;
+    try {
+      final status = await Permission.notification.request();
+      return status.isGranted;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Minta semua izin yang dibutuhkan untuk tracking.
-  /// Mengembalikan true jika semua izin penting diberikan.
+  /// Mengembalikan true selama izin lokasi foreground ("Saat aplikasi digunakan" / "Selalu") diberikan.
   static Future<bool> requestAllTrackingPermissions() async {
-    // 1. Izin lokasi foreground
+    // 1. Izin lokasi foreground (wajib untuk GPS & rute)
     final locationGranted = await requestLocationPermission();
     if (!locationGranted) return false;
 
-    // 2. Izin notifikasi (untuk foreground service notification)
-    await requestNotificationPermission();
+    // 2. Izin notifikasi & background (opsional untuk foreground service di Android/iOS)
+    if (!kIsWeb) {
+      await requestNotificationPermission();
+      await requestBackgroundLocationPermission();
+    }
 
-    // 3. Izin lokasi background
-    final backgroundGranted = await requestBackgroundLocationPermission();
-
-    return backgroundGranted;
+    return true;
   }
 
   /// Tampilkan dialog jika izin ditolak permanen.
@@ -79,9 +84,9 @@ class PermissionService {
       builder: (ctx) => AlertDialog(
         title: const Text('Izin Lokasi Diperlukan'),
         content: const Text(
-          'Trackie membutuhkan akses lokasi "Selalu Izinkan" agar posisi Anda '
-          'tetap terlihat oleh anggota grup saat HP dikunci.\n\n'
-          'Buka Pengaturan → Izin → Lokasi → Izinkan Selalu.',
+          'Trackie membutuhkan akses lokasi agar posisi Anda dan rute perjalanan '
+          'dapat ditampilkan secara akurat dari daerah Anda saat ini.\n\n'
+          'Buka Pengaturan → Izin → Lokasi → Izinkan.',
         ),
         actions: [
           TextButton(

@@ -16,6 +16,10 @@ CREATE TABLE IF NOT EXISTS public.profiles (
   phone TEXT,
   birth_date DATE,
   avatar_url TEXT,
+  plan TEXT NOT NULL DEFAULT 'free', -- 'free' atau 'premium'
+  subscription_status TEXT NOT NULL DEFAULT 'active', -- 'active', 'expired', 'canceled'
+  subscription_expires_at TIMESTAMPTZ,
+  has_seen_subscription_page BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -26,6 +30,10 @@ ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS vehicle TEXT DEFAULT '';
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS phone TEXT;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS birth_date DATE;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS subscription_status TEXT NOT NULL DEFAULT 'active';
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS subscription_expires_at TIMESTAMPTZ;
+ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS has_seen_subscription_page BOOLEAN NOT NULL DEFAULT false;
 ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
 
 -- Trigger otomatis membuat profile saat user mendaftar di auth.users
@@ -45,7 +53,10 @@ BEGIN
     v_birth := NULL;
   END;
 
-  INSERT INTO public.profiles (id, name, email, avatar_url, vehicle, phone, birth_date)
+  INSERT INTO public.profiles (
+    id, name, email, avatar_url, vehicle, phone, birth_date,
+    plan, subscription_status, has_seen_subscription_page
+  )
   VALUES (
     NEW.id,
     LEFT(COALESCE(NEW.raw_user_meta_data->>'name', NEW.raw_user_meta_data->>'full_name', 'User'), 100),
@@ -53,7 +64,10 @@ BEGIN
     COALESCE(NEW.raw_user_meta_data->>'avatar_url', NEW.raw_user_meta_data->>'photo_url'),
     LEFT(COALESCE(NEW.raw_user_meta_data->>'vehicle', ''), 100),
     LEFT(COALESCE(NEW.raw_user_meta_data->>'phone', NEW.phone), 30),
-    v_birth
+    v_birth,
+    COALESCE(NEW.raw_user_meta_data->>'plan', 'free'),
+    COALESCE(NEW.raw_user_meta_data->>'subscription_status', 'active'),
+    COALESCE((NEW.raw_user_meta_data->>'has_seen_subscription_page')::boolean, false)
   )
   ON CONFLICT (id) DO UPDATE SET
     name       = EXCLUDED.name,
@@ -102,6 +116,53 @@ ALTER TABLE public.groups ALTER COLUMN invite_code TYPE VARCHAR(12);
 
 CREATE INDEX IF NOT EXISTS idx_groups_invite_code ON public.groups (invite_code);
 CREATE INDEX IF NOT EXISTS idx_groups_status ON public.groups (status);
+
+-- Fungsi Validasi Batas Grup Berdasarkan Plan Subscription (Server-Side Enforcement)
+-- Free: maks 2 grup | Premium Aktif: maks 20 grup
+CREATE OR REPLACE FUNCTION public.can_create_or_join_group(p_uid uuid)
+RETURNS boolean
+LANGUAGE plpgsql
+STABLE
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_plan       text := 'free';
+  v_status     text := 'active';
+  v_expires_at timestamptz;
+  v_max_groups int  := 2;
+  v_used_count int  := 0;
+BEGIN
+  IF p_uid IS NULL THEN
+    RETURN false;
+  END IF;
+
+  SELECT coalesce(plan, 'free'),
+         coalesce(subscription_status, 'active'),
+         subscription_expires_at
+    INTO v_plan, v_status, v_expires_at
+    FROM public.profiles
+   WHERE id = p_uid;
+
+  IF lower(v_plan) = 'premium'
+     AND lower(v_status) IN ('active', 'canceled')
+     AND (v_expires_at IS NULL OR v_expires_at > now()) THEN
+    v_max_groups := 20;
+  ELSE
+    v_max_groups := 2;
+  END IF;
+
+  SELECT count(*)
+    INTO v_used_count
+    FROM public.groups g
+   WHERE p_uid::text = ANY (g.member_uids);
+
+  RETURN v_used_count < v_max_groups;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.can_create_or_join_group(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.can_create_or_join_group(uuid) TO authenticated;
 
 -- 4. Tabel Riwayat Perjalanan (Trip History)
 CREATE TABLE IF NOT EXISTS public.trip_history (
@@ -165,6 +226,7 @@ CREATE POLICY "profiles_delete_own" ON public.profiles
 
 DROP POLICY IF EXISTS "groups_select_members" ON public.groups;
 DROP POLICY IF EXISTS "groups_insert_as_host" ON public.groups;
+DROP POLICY IF EXISTS "groups_update_as_host" ON public.groups;
 
 CREATE POLICY "groups_select_members" ON public.groups
   FOR SELECT TO authenticated
@@ -177,7 +239,13 @@ CREATE POLICY "groups_insert_as_host" ON public.groups
     AND member_uids = ARRAY[(SELECT auth.uid())::text]
     AND status = 'active'
     AND ended_at IS NULL
+    AND public.can_create_or_join_group((SELECT auth.uid()))
   );
+
+CREATE POLICY "groups_update_as_host" ON public.groups
+  FOR UPDATE TO authenticated
+  USING (host_uid = (SELECT auth.uid()))
+  WITH CHECK (host_uid = (SELECT auth.uid()));
 
 DROP POLICY IF EXISTS "trip_history_own" ON public.trip_history;
 
@@ -189,19 +257,44 @@ CREATE POLICY "trip_history_own" ON public.trip_history
 -- 6. RPC Keanggotaan Grup & Hapus Akun (Atomik & Divalidasi di Server)
 CREATE OR REPLACE FUNCTION public.join_group(p_invite_code text)
 RETURNS SETOF public.groups
-LANGUAGE sql
+LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = ''
 AS $$
-  UPDATE public.groups
-     SET member_uids = CASE
-           WHEN auth.uid()::text = ANY (member_uids) THEN member_uids
-           ELSE array_append(member_uids, auth.uid()::text)
-         END
+DECLARE
+  v_uid   uuid := auth.uid();
+  v_group public.groups;
+BEGIN
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'not authenticated';
+  END IF;
+
+  SELECT * INTO v_group
+    FROM public.groups
    WHERE invite_code = upper(trim(p_invite_code))
      AND status = 'active'
-     AND auth.uid() IS NOT NULL
+   FOR UPDATE;
+
+  IF NOT FOUND THEN
+    RETURN;
+  END IF;
+
+  -- Jika user belum menjadi anggota grup ini, validasi batas kuota grup berdasarkan plan
+  IF NOT (v_uid::text = ANY (v_group.member_uids)) THEN
+    IF NOT public.can_create_or_join_group(v_uid) THEN
+      RAISE EXCEPTION 'GROUP_LIMIT_REACHED: Kamu sudah mencapai batas jumlah grup untuk paket saat ini.';
+    END IF;
+  END IF;
+
+  RETURN QUERY
+  UPDATE public.groups
+     SET member_uids = CASE
+           WHEN v_uid::text = ANY (member_uids) THEN member_uids
+           ELSE array_append(member_uids, v_uid::text)
+         END
+   WHERE id = v_group.id
   RETURNING *;
+END;
 $$;
 
 CREATE OR REPLACE FUNCTION public.leave_group(p_group_id uuid)
@@ -326,10 +419,6 @@ BEGIN
 END $$;
 
 -- 9. Otorisasi Realtime Broadcast (Private Channel) untuk Live Tracking
--- Client memakai channel private 'group_tracking:<group_id>'.
--- Hanya anggota grup yang masih aktif yang boleh join, menerima, dan mengirim.
--- PENTING: Matikan "Allow public access" di Dashboard -> Realtime -> Settings
--- agar channel non-private (yang melewati RLS ini) ditolak oleh server.
 CREATE OR REPLACE FUNCTION public.can_access_tracking_topic(p_topic text)
 RETURNS boolean
 LANGUAGE plpgsql
@@ -345,7 +434,7 @@ BEGIN
   END IF;
 
   BEGIN
-    v_group_id := substring(p_topic FROM 16)::uuid; -- panjang 'group_tracking:' = 15
+    v_group_id := substring(p_topic FROM 16)::uuid;
   EXCEPTION WHEN invalid_text_representation THEN
     RETURN false;
   END;

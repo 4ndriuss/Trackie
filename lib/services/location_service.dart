@@ -1,14 +1,15 @@
 // File: location_service.dart
 // Service untuk mengelola broadcast dan streaming lokasi real-time
-// anggota grup menggunakan Supabase Realtime Broadcast (WebSocket).
+// anggota grup serta titik tujuan (destination) menggunakan Supabase Realtime Broadcast (WebSocket).
 // Tidak membebani database write cost sama sekali.
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/location_model.dart';
 import '../supabase_config.dart';
+import 'routing_service.dart';
 
-/// [LocationService] mengelola transmisi koordinat GPS secara real-time
+/// [LocationService] mengelola transmisi koordinat GPS dan titik tujuan secara real-time
 /// menggunakan Supabase Realtime Channels (Broadcast event).
 class LocationService {
   /// Nama topic Realtime untuk grup. Format ini HARUS sama dengan yang
@@ -20,7 +21,9 @@ class LocationService {
   RealtimeChannel? _channel;
   String? _currentGroupId;
   final Map<String, MemberLocation> _groupLocations = {};
+  DestinationTarget? _groupDestination;
   StreamController<List<MemberLocation>>? _locationStreamController;
+  StreamController<DestinationTarget?>? _destinationStreamController;
 
   /// Broadcast lokasi pengguna ke channel Supabase grup.
   /// Event: 'location_update'
@@ -56,12 +59,48 @@ class LocationService {
     }
   }
 
+  /// Broadcast pembaruan titik tujuan (oleh Host) ke seluruh anggota grup.
+  /// Event: 'destination_update'
+  Future<void> broadcastDestination({
+    required String groupId,
+    required DestinationTarget target,
+  }) async {
+    _groupDestination = target;
+    _emitDestination();
+
+    final channel = _ensureChannel(groupId);
+    try {
+      await channel.sendBroadcastMessage(
+        event: 'destination_update',
+        payload: target.toMap(),
+      );
+    } catch (e) {
+      debugPrint('Error broadcasting destination: $e');
+    }
+  }
+
+  /// Stream titik tujuan grup secara real-time.
+  Stream<DestinationTarget?> streamGroupDestination(String groupId) {
+    if (_currentGroupId != groupId) {
+      _currentGroupId = groupId;
+      _groupLocations.clear();
+      _groupDestination = null;
+      _setupChannel(groupId);
+    }
+
+    _destinationStreamController ??=
+        StreamController<DestinationTarget?>.broadcast();
+    _emitDestination();
+    return _destinationStreamController!.stream;
+  }
+
   /// Stream lokasi semua anggota dalam satu grup.
   /// Mengembalikan `Stream<List<MemberLocation>>`.
   Stream<List<MemberLocation>> streamGroupLocations(String groupId) {
     if (_currentGroupId != groupId) {
       _currentGroupId = groupId;
       _groupLocations.clear();
+      _groupDestination = null;
       _setupChannel(groupId);
     }
 
@@ -134,6 +173,27 @@ class LocationService {
           },
         )
         .onBroadcast(
+          event: 'destination_update',
+          callback: (message) {
+            try {
+              final data = _unwrap(message);
+              if (data == null) return;
+              final target = DestinationTarget.fromMap(data);
+              if (target.point.latitude.isFinite &&
+                  target.point.longitude.isFinite &&
+                  target.point.latitude >= -90 &&
+                  target.point.latitude <= 90 &&
+                  target.point.longitude >= -180 &&
+                  target.point.longitude <= 180) {
+                _groupDestination = target;
+                _emitDestination();
+              }
+            } catch (e) {
+              debugPrint('Error parsing broadcast destination: $e');
+            }
+          },
+        )
+        .onBroadcast(
           event: 'request_sync',
           callback: (payload) {
             // Ketika member baru minta sync, broadcast ulang lokasi diri sendiri jika ada
@@ -142,6 +202,13 @@ class LocationService {
               _channel?.sendBroadcastMessage(
                 event: 'location_update',
                 payload: _groupLocations[myUid]!.toMap(),
+              );
+            }
+            // Broadcast ulang juga titik tujuan terkini jika sudah ada
+            if (_groupDestination != null) {
+              _channel?.sendBroadcastMessage(
+                event: 'destination_update',
+                payload: _groupDestination!.toMap(),
               );
             }
           },
@@ -156,7 +223,13 @@ class LocationService {
             payload: _groupLocations[myUid]!.toMap(),
           );
         }
-        // Minta anggota lain untuk mengirim koordinat mereka
+        if (_groupDestination != null) {
+          _channel?.sendBroadcastMessage(
+            event: 'destination_update',
+            payload: _groupDestination!.toMap(),
+          );
+        }
+        // Minta anggota lain untuk mengirim koordinat & tujuan mereka
         _channel?.sendBroadcastMessage(
           event: 'request_sync',
           payload: {'from': myUid},
@@ -190,6 +263,13 @@ class LocationService {
   void _emitLocations() {
     if (_locationStreamController != null && !_locationStreamController!.isClosed) {
       _locationStreamController!.add(_groupLocations.values.toList());
+    }
+  }
+
+  void _emitDestination() {
+    if (_destinationStreamController != null &&
+        !_destinationStreamController!.isClosed) {
+      _destinationStreamController!.add(_groupDestination);
     }
   }
 
@@ -230,7 +310,9 @@ class LocationService {
   /// Bersihkan channel dan data grup saat grup berakhir.
   Future<void> cleanupGroupLocations(String groupId) async {
     _groupLocations.clear();
+    _groupDestination = null;
     _emitLocations();
+    _emitDestination();
     _channel?.unsubscribe();
     _channel = null;
     _currentGroupId = null;

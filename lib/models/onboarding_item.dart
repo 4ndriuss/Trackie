@@ -4,7 +4,7 @@ class OnboardingItem {
   final String description;
   final String imagePath;
 
-  OnboardingItem({
+  const OnboardingItem({
     required this.title,
     required this.description,
     required this.imagePath,

@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../providers/auth_provider.dart';
+import '../providers/subscription_provider.dart';
 import '../widgets/custom_textfield.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/social_button.dart';
@@ -30,6 +31,19 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  Future<String> _resolvePostLoginRoute() async {
+    final authProvider = context.read<AuthProvider>();
+    final subProvider = context.read<SubscriptionProvider>();
+    final uid = authProvider.user?.uid;
+    if (uid != null) {
+      await subProvider.initializeForUser(uid, forceRefresh: true);
+      if (!subProvider.hasSeenSubscriptionPage) {
+        return '/subscription-onboarding';
+      }
+    }
+    return '/home';
+  }
+
   Future<void> _handleLogin() async {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
@@ -41,19 +55,26 @@ class _LoginPageState extends State<LoginPage> {
       );
       
       if (!mounted) return;
-      setState(() => _isLoading = false);
-      
+
       if (success) {
+        final targetRoute = await _resolvePostLoginRoute();
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+
         await showSuccessDialog(
           context,
           title: 'Welcome Back!',
           message: 'You have logged in successfully.',
           buttonText: 'Continue',
           onPressed: () {
-            Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+            Navigator.of(context).pushNamedAndRemoveUntil(
+              targetRoute,
+              (route) => false,
+            );
           },
         );
       } else {
+        setState(() => _isLoading = false);
         await showErrorDialog(
           context,
           title: 'Login Failed',
@@ -72,25 +93,34 @@ class _LoginPageState extends State<LoginPage> {
     final success = await authProvider.loginWithGoogle();
 
     if (!mounted) return;
-    setState(() => _isLoading = false);
 
     if (success) {
+      final targetRoute = await _resolvePostLoginRoute();
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+
       await showSuccessDialog(
         context,
         title: 'Welcome Back!',
         message: 'You have logged in successfully with Google.',
         buttonText: 'Continue',
         onPressed: () {
-          Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+          Navigator.of(context).pushNamedAndRemoveUntil(
+            targetRoute,
+            (route) => false,
+          );
         },
       );
-    } else if (authProvider.error != null) {
-      await showErrorDialog(
-        context,
-        title: 'Google Login Failed',
-        message: authProvider.error!,
-        buttonText: 'Try Again',
-      );
+    } else {
+      setState(() => _isLoading = false);
+      if (authProvider.error != null) {
+        await showErrorDialog(
+          context,
+          title: 'Google Login Failed',
+          message: authProvider.error!,
+          buttonText: 'Try Again',
+        );
+      }
     }
   }
 
@@ -102,25 +132,34 @@ class _LoginPageState extends State<LoginPage> {
     final success = await authProvider.loginWithFacebook();
 
     if (!mounted) return;
-    setState(() => _isLoading = false);
 
     if (success) {
+      final targetRoute = await _resolvePostLoginRoute();
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+
       await showSuccessDialog(
         context,
         title: 'Welcome Back!',
         message: 'You have logged in successfully with Facebook.',
         buttonText: 'Continue',
         onPressed: () {
-          Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+          Navigator.of(context).pushNamedAndRemoveUntil(
+            targetRoute,
+            (route) => false,
+          );
         },
       );
-    } else if (authProvider.error != null) {
-      await showErrorDialog(
-        context,
-        title: 'Facebook Login Failed',
-        message: authProvider.error!,
-        buttonText: 'Try Again',
-      );
+    } else {
+      setState(() => _isLoading = false);
+      if (authProvider.error != null) {
+        await showErrorDialog(
+          context,
+          title: 'Facebook Login Failed',
+          message: authProvider.error!,
+          buttonText: 'Try Again',
+        );
+      }
     }
   }
 
