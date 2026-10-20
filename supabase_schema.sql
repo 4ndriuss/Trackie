@@ -65,8 +65,8 @@ BEGIN
     LEFT(COALESCE(NEW.raw_user_meta_data->>'vehicle', ''), 100),
     LEFT(COALESCE(NEW.raw_user_meta_data->>'phone', NEW.phone), 30),
     v_birth,
-    COALESCE(NEW.raw_user_meta_data->>'plan', 'free'),
-    COALESCE(NEW.raw_user_meta_data->>'subscription_status', 'active'),
+    'free', -- HARDENED: selalu free saat registrasi
+    'active', -- HARDENED: selalu active
     COALESCE((NEW.raw_user_meta_data->>'has_seen_subscription_page')::boolean, false)
   )
   ON CONFLICT (id) DO UPDATE SET
@@ -152,10 +152,12 @@ BEGIN
     v_max_groups := 2;
   END IF;
 
+  -- Hitung hanya grup yang berstatus 'active' (bukan yang sudah 'ended')
   SELECT count(*)
     INTO v_used_count
     FROM public.groups g
-   WHERE p_uid::text = ANY (g.member_uids);
+   WHERE p_uid::text = ANY (g.member_uids)
+     AND g.status = 'active';
 
   RETURN v_used_count < v_max_groups;
 END;
@@ -221,6 +223,37 @@ CREATE POLICY "profiles_insert_own" ON public.profiles
 CREATE POLICY "profiles_update_own" ON public.profiles
   FOR UPDATE TO authenticated
   USING ((SELECT auth.uid()) = id) WITH CHECK ((SELECT auth.uid()) = id);
+
+-- Batasi hak UPDATE: cabut update umum, hanya izinkan kolom profil non-sensitif
+REVOKE UPDATE ON public.profiles FROM authenticated, anon, PUBLIC;
+GRANT UPDATE (
+  name, vehicle, phone, birth_date, avatar_url, has_seen_subscription_page
+) ON public.profiles TO authenticated;
+
+-- Trigger proteksi: cegah modifikasi kolom langganan selain oleh service_role
+CREATE OR REPLACE FUNCTION public.protect_profile_subscription_fields()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  IF (NEW.plan IS DISTINCT FROM OLD.plan)
+     OR (NEW.subscription_status IS DISTINCT FROM OLD.subscription_status)
+     OR (NEW.subscription_expires_at IS DISTINCT FROM OLD.subscription_expires_at) THEN
+    IF COALESCE(auth.role(), '') != 'service_role' THEN
+      RAISE EXCEPTION 'Akses ditolak: Kolom paket dan langganan hanya dapat diperbarui oleh sistem / service role backend.';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_protect_profile_subscription ON public.profiles;
+CREATE TRIGGER trg_protect_profile_subscription
+  BEFORE UPDATE ON public.profiles
+  FOR EACH ROW
+  EXECUTE FUNCTION public.protect_profile_subscription_fields();
 CREATE POLICY "profiles_delete_own" ON public.profiles
   FOR DELETE TO authenticated USING ((SELECT auth.uid()) = id);
 
