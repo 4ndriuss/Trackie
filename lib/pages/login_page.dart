@@ -152,7 +152,7 @@ class _LoginPageState extends State<LoginPage> {
       );
     } else {
       setState(() => _isLoading = false);
-      if (authProvider.error != null) {
+      if (authProvider.error != null && authProvider.error!.isNotEmpty) {
         await showErrorDialog(
           context,
           title: 'Facebook Login Failed',
