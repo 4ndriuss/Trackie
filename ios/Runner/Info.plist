@@ -40,6 +40,11 @@
 		<string>Trackie membutuhkan akses lokasi di latar belakang agar posisi Anda tetap terlihat oleh anggota grup saat HP dikunci.</string>
 		<key>NSLocationAlwaysUsageDescription</key>
 		<string>Trackie membutuhkan akses lokasi di latar belakang agar posisi Anda tetap terlihat oleh anggota grup saat HP dikunci.</string>
+		<!-- Izin Akses Galeri & Kamera untuk ImagePicker (Foto Profil) -->
+		<key>NSPhotoLibraryUsageDescription</key>
+		<string>Trackie membutuhkan akses ke galeri foto untuk memilih dan mengunggah foto profil akun Anda.</string>
+		<key>NSCameraUsageDescription</key>
+		<string>Trackie membutuhkan akses kamera untuk mengambil foto profil baru secara langsung.</string>
 		<key>UIApplicationSceneManifest</key>
 		<dict>
 			<key>UIApplicationSupportsMultipleScenes</key>
