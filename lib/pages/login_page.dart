@@ -3,7 +3,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../providers/auth_provider.dart';
-import '../providers/subscription_provider.dart';
 import '../widgets/custom_textfield.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/social_button.dart';
@@ -32,19 +31,6 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  Future<String> _resolvePostLoginRoute() async {
-    final authProvider = context.read<AuthProvider>();
-    final subProvider = context.read<SubscriptionProvider>();
-    final uid = authProvider.user?.uid;
-    if (uid != null) {
-      await subProvider.initializeForUser(uid, forceRefresh: true);
-      if (!subProvider.hasSeenSubscriptionPage) {
-        return '/subscription-onboarding';
-      }
-    }
-    return '/home';
-  }
-
   Future<void> _handleLogin() async {
     if (_formKey.currentState!.validate()) {
       setState(() => _isLoading = true);
@@ -58,8 +44,6 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
 
       if (success) {
-        final targetRoute = await _resolvePostLoginRoute();
-        if (!mounted) return;
         setState(() => _isLoading = false);
 
         await showSuccessDialog(
@@ -69,7 +53,7 @@ class _LoginPageState extends State<LoginPage> {
           buttonText: 'Continue',
           onPressed: () {
             Navigator.of(context).pushNamedAndRemoveUntil(
-              targetRoute,
+              '/',
               (route) => false,
             );
           },
@@ -96,8 +80,6 @@ class _LoginPageState extends State<LoginPage> {
     if (!mounted) return;
 
     if (success) {
-      final targetRoute = await _resolvePostLoginRoute();
-      if (!mounted) return;
       setState(() => _isLoading = false);
 
       await showSuccessDialog(
@@ -107,7 +89,7 @@ class _LoginPageState extends State<LoginPage> {
         buttonText: 'Continue',
         onPressed: () {
           Navigator.of(context).pushNamedAndRemoveUntil(
-            targetRoute,
+            '/',
             (route) => false,
           );
         },
@@ -135,8 +117,6 @@ class _LoginPageState extends State<LoginPage> {
     if (!mounted) return;
 
     if (success) {
-      final targetRoute = await _resolvePostLoginRoute();
-      if (!mounted) return;
       setState(() => _isLoading = false);
 
       await showSuccessDialog(
@@ -146,7 +126,7 @@ class _LoginPageState extends State<LoginPage> {
         buttonText: 'Continue',
         onPressed: () {
           Navigator.of(context).pushNamedAndRemoveUntil(
-            targetRoute,
+            '/',
             (route) => false,
           );
         },

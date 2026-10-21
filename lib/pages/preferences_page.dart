@@ -4,6 +4,7 @@ import '../theme/app_theme.dart';
 import '../main.dart';
 import '../providers/locale_provider.dart';
 import '../providers/subscription_provider.dart';
+import '../providers/theme_provider.dart';
 import '../l10n/app_localizations.dart';
 import 'subscription_page.dart';
 
@@ -191,6 +192,9 @@ class _PreferencesPageState extends State<PreferencesPage> {
                     onChanged: (value) {
                       if (value != null) {
                         themeNotifier.value = value;
+                        try {
+                          context.read<ThemeProvider>().setThemeMode(value);
+                        } catch (_) {}
                       }
                     },
                     child: Column(

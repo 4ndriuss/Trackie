@@ -350,7 +350,7 @@ class _AccountPageState extends State<AccountPage> {
               final success = await authProvider.deleteAccount();
               if (!context.mounted) return;
               if (success) {
-                Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+                Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(

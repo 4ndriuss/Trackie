@@ -17,7 +17,8 @@
     <application
         android:label="trackie"
         android:name="${applicationName}"
-        android:icon="@mipmap/launcher_icon">
+        android:icon="@mipmap/launcher_icon"
+        android:allowBackup="false">
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -50,7 +51,8 @@
         <!-- Foreground Service untuk Background Location Tracking -->
         <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
-            android:foregroundServiceType="location" />
+            android:foregroundServiceType="location"
+            android:exported="false" />
     </application>
     <!-- Required to query activities that can process text, see:
          https://developer.android.com/training/package-visibility and

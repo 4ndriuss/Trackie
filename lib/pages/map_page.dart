@@ -19,51 +19,8 @@ import '../providers/group_provider.dart';
 import '../providers/location_provider.dart';
 import '../services/haversine_utils.dart';
 import '../services/routing_service.dart';
-import '../services/trip_service.dart';
-
-/// Status anggota grup, menentukan warna indikator dan opasitas marker.
-enum MemberStatus { online, offline, sos }
-
-/// [GroupMember] menyimpan data untuk setiap anggota yang tergabung dalam perjalanan.
-class GroupMember {
-  const GroupMember({
-    required this.id,
-    required this.name,
-    required this.status,
-    required this.position,
-    required this.distanceMeters,
-  });
-
-  final String id;
-  final String name;
-  final MemberStatus status;
-  final LatLng position; // Titik koordinat di peta
-  final double distanceMeters; // Jarak anggota dengan pengguna saat ini
-
-  // Mengecek status anggota
-  bool get isOnline =>
-      status == MemberStatus.online || status == MemberStatus.sos;
-  bool get isSos => status == MemberStatus.sos;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is GroupMember &&
-          runtimeType == other.runtimeType &&
-          id == other.id &&
-          name == other.name &&
-          status == other.status &&
-          position == other.position &&
-          distanceMeters == other.distanceMeters;
-
-  @override
-  int get hashCode => Object.hash(id, name, status, position, distanceMeters);
-}
-
-/// Fungsi pembantu untuk memformat jarak agar mudah dibaca.
-/// Di bawah 1000m ditampilkan dalam meter (m), selain itu kilometer (km).
-String formatDistance(double m) =>
-    m < 1000 ? '${m.round()} m' : '${(m / 1000).toStringAsFixed(1)} km';
+import '../models/group_member_model.dart';
+export '../models/group_member_model.dart';
 
 class _MarkerLayerData {
   final List<GroupMember> members;
@@ -310,6 +267,7 @@ class _MapPageState extends State<MapPage> {
       tripName: activeGroup.name,
       initialDestination: activeGroup.destination,
       vehicleType: activeGroup.type,
+      hostUid: activeGroup.hostUid,
     );
   }
 
@@ -949,51 +907,23 @@ class _MapPageState extends State<MapPage> {
       final locationProvider = context.read<LocationProvider>();
 
       final activeGroup = groupProvider.activeGroup;
-      final groupId = activeGroup?.id;
       final uid = authProvider.user?.uid;
 
-      // 1. Susun & simpan riwayat perjalanan ke Supabase sebelum menghentikan state tracking
-      if (uid != null && activeGroup != null) {
-        try {
-          final completedTrip = locationProvider.buildCompletedTripHistory(
-            groupName: activeGroup.name,
-            rawDestination: activeGroup.destination,
-            groupType: activeGroup.type,
-            isHost: isHost,
-            fallbackMemberCount: activeGroup.memberCount,
-            groupCreatedAt: activeGroup.createdAt,
-          );
-          await TripService().saveTrip(uid: uid, trip: completedTrip);
-        } catch (e) {
-          debugPrint('Error saving trip history on finish: $e');
-        }
-      }
-
-      // 2. Siarkan event group_ended jika Host, agar semua anggota langsung terinfo
-      if (isHost && groupId != null) {
-        try {
-          await locationProvider.broadcastGroupEnded(groupId);
-        } catch (e) {
-          debugPrint('Error broadcasting group_ended: $e');
-        }
-      }
-
-      // 3. Hentikan tracking lokasi
-      await locationProvider.stopTracking(groupId: groupId, uid: uid);
-
-      // 4. Akhiri grup (jika Host) atau keluar grup (jika Member)
-      if (uid != null && groupId != null) {
-        if (isHost) {
-          await groupProvider.endGroup();
-        } else {
-          await groupProvider.leaveGroup(uid: uid);
-        }
-      }
+      // ARCH-06: Orkestrasi bisnis selesai perjalanan dipusatkan di LocationProvider
+      final tripSavedSuccessfully = await locationProvider.completeAndEndTrip(
+        uid: uid,
+        activeGroup: activeGroup,
+        isHost: isHost,
+        groupProvider: groupProvider,
+      );
 
       if (mounted) {
+        final message = (uid == null || activeGroup == null || tripSavedSuccessfully)
+            ? '✅ Perjalanan selesai dan tersimpan di Riwayat!'
+            : '⚠️ Perjalanan selesai. Riwayat diamankan di perangkat lokal (koneksi terputus).';
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Perjalanan selesai dan tersimpan di Riwayat!'),
+          SnackBar(
+            content: Text(message),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -1013,31 +943,23 @@ class _MapPageState extends State<MapPage> {
     final activeGroup = groupProvider.activeGroup;
     final uid = authProvider.user?.uid;
 
-    if (uid != null && activeGroup != null) {
-      try {
-        final completedTrip = locationProvider.buildCompletedTripHistory(
-          groupName: activeGroup.name,
-          rawDestination: activeGroup.destination,
-          groupType: activeGroup.type,
-          isHost: false,
-          fallbackMemberCount: activeGroup.memberCount,
-          groupCreatedAt: activeGroup.createdAt,
-        );
-        await TripService().saveTrip(uid: uid, trip: completedTrip);
-      } catch (e) {
-        debugPrint('Error saving member trip history on remote group end: $e');
-      }
-    }
-
-    await locationProvider.stopTracking(groupId: activeGroup?.id, uid: uid);
-    groupProvider.clearActiveGroup();
+    // ARCH-06: Orkestrasi bisnis selesai perjalanan dipusatkan di LocationProvider
+    final tripSavedSuccessfully = await locationProvider.completeAndEndTrip(
+      uid: uid,
+      activeGroup: activeGroup,
+      isHost: false,
+      groupProvider: groupProvider,
+    );
 
     if (mounted) {
+      final message = (uid == null || activeGroup == null || tripSavedSuccessfully)
+          ? 'Perjalanan telah diakhiri oleh Host. Riwayat Anda telah disimpan.'
+          : 'Perjalanan telah diakhiri. Riwayat diamankan di perangkat lokal (koneksi terputus).';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Perjalanan telah diakhiri oleh Host. Riwayat Anda telah disimpan.'),
+        SnackBar(
+          content: Text(message),
           behavior: SnackBarBehavior.floating,
-          duration: Duration(seconds: 4),
+          duration: const Duration(seconds: 4),
         ),
       );
       setState(() => _canPopNow = true);
@@ -1082,6 +1004,8 @@ class _MapPageState extends State<MapPage> {
       if (groupId != null && uid != null) {
         await locationProvider.triggerSOS(groupId: groupId, uid: uid);
       }
+
+      if (!mounted) return;
 
       setState(() {
         final index = _fallbackMembers.indexWhere((m) => m.id == 'anda');
@@ -1161,7 +1085,7 @@ class _MapPageState extends State<MapPage> {
                     TileLayer(
                       urlTemplate:
                           'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.example.trackie',
+                      userAgentPackageName: 'com.trackie.app',
                     ),
                     const _MapRouteLayer(),
                     _MapMarkersLayer(

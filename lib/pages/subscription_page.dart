@@ -62,7 +62,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
 
     if (ok) {
       if (widget.isFirstTimeFlow) {
-        Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+        Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -114,7 +114,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
         ),
       );
       if (widget.isFirstTimeFlow) {
-        Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+        Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
       } else {
         setState(() {
           _statusBannerMessage = result.message;
@@ -152,7 +152,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
     );
 
     if (result.success && widget.isFirstTimeFlow) {
-      Navigator.of(context).pushNamedAndRemoveUntil('/home', (route) => false);
+      Navigator.of(context).pushNamedAndRemoveUntil('/', (route) => false);
     }
   }
 
@@ -441,8 +441,8 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Panel Developer Mock Toggle (Memudahkan pengetesan Free / Premium / Expired)
-                    if (uid != null) ...[
+                    // Panel Developer Mock Toggle (SEC-02: Terproteksi hanya tampil saat mode debug / development)
+                    if (kDebugMode && uid != null) ...[
                       _buildDeveloperMockCard(
                         uid: uid,
                         subProvider: subProvider,

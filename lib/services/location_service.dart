@@ -16,15 +16,29 @@ class LocationService {
   /// diperiksa fungsi SQL `public.can_access_tracking_topic`.
   static String trackingTopic(String groupId) => 'group_tracking:$groupId';
 
-  SupabaseClient get _supabase => SupabaseConfig.client;
+  final SupabaseClient? _injectedClient;
+
+  LocationService({SupabaseClient? supabaseClient}) : _injectedClient = supabaseClient;
+
+  SupabaseClient get _supabase => _injectedClient ?? SupabaseConfig.client;
 
   RealtimeChannel? _channel;
   String? _currentGroupId;
+  String? _expectedHostUid;
   final Map<String, MemberLocation> _groupLocations = {};
   DestinationTarget? _groupDestination;
   StreamController<List<MemberLocation>>? _locationStreamController;
   StreamController<DestinationTarget?>? _destinationStreamController;
   StreamController<String>? _groupEndedStreamController;
+
+  /// Konfigurasikan UID Host grup yang diharapkan untuk memvalidasi
+  /// broadcast resmi (seperti pembaruan destinasi atau grup diakhiri - BACK-03).
+  void setExpectedHostUid(String? hostUid) {
+    _expectedHostUid = hostUid;
+  }
+
+  /// UID Host yang diharapkan saat ini.
+  String? get expectedHostUid => _expectedHostUid;
 
   /// Stream notifikasi saat grup telah diakhiri oleh Host.
   Stream<String> get onGroupEnded {
@@ -42,8 +56,14 @@ class LocationService {
     required double lng,
     String status = 'online',
   }) async {
+    // Validasi & pastikan UID autentik (cegah impersonasi / spoofing UID anggota lain - BACK-03)
+    final authenticatedUid = _supabase.auth.currentUser?.id;
+    final effectiveUid = (authenticatedUid != null && authenticatedUid.isNotEmpty)
+        ? authenticatedUid
+        : uid;
+
     final location = MemberLocation(
-      uid: uid,
+      uid: effectiveUid,
       name: name,
       lat: lat,
       lng: lng,
@@ -52,7 +72,7 @@ class LocationService {
     );
 
     // Update state lokal kita sendiri juga
-    _groupLocations[uid] = location;
+    _groupLocations[effectiveUid] = location;
     _emitLocations();
 
     final channel = _ensureChannel(groupId);
@@ -71,7 +91,24 @@ class LocationService {
   Future<void> broadcastDestination({
     required String groupId,
     required DestinationTarget target,
+    String? hostUid,
   }) async {
+    final currentUid = _supabase.auth.currentUser?.id;
+    final effectiveHostUid = hostUid ?? _expectedHostUid ?? currentUid;
+
+    // Sinkronisasi ke database lewat RPC berotorisasi Host (BACK-03)
+    try {
+      await _supabase.rpc('set_group_destination', params: {
+        'p_group_id': groupId,
+        'p_destination': RoutingService.encodeDestination(
+          target.name,
+          target.point,
+        ),
+      });
+    } catch (e) {
+      debugPrint('Catatan: RPC set_group_destination: $e');
+    }
+
     _groupDestination = target;
     _emitDestination();
 
@@ -79,7 +116,7 @@ class LocationService {
     try {
       await channel.sendBroadcastMessage(
         event: 'destination_update',
-        payload: target.toMap(),
+        payload: _destinationPayload(target, effectiveHostUid),
       );
     } catch (e) {
       debugPrint('Error broadcasting destination: $e');
@@ -185,6 +222,17 @@ class LocationService {
             try {
               final data = _unwrap(message);
               if (data == null) return;
+
+              // Validasi Host (BACK-03): Abaikan jika ada host_uid dan tidak cocok dengan Host grup
+              final senderHostUid = data['host_uid'] as String?;
+              if (_expectedHostUid != null &&
+                  senderHostUid != null &&
+                  senderHostUid != _expectedHostUid) {
+                debugPrint(
+                    'Peringatan: destination_update ditolak dari pengirim ilegal: $senderHostUid');
+                return;
+              }
+
               final target = DestinationTarget.fromMap(data);
               if (target.point.latitude.isFinite &&
                   target.point.longitude.isFinite &&
@@ -215,7 +263,7 @@ class LocationService {
             if (_groupDestination != null) {
               _channel?.sendBroadcastMessage(
                 event: 'destination_update',
-                payload: _groupDestination!.toMap(),
+                payload: _destinationPayload(_groupDestination!),
               );
             }
           },
@@ -225,6 +273,17 @@ class LocationService {
           callback: (message) {
             try {
               final data = _unwrap(message);
+
+              // Validasi Host (BACK-03): Abaikan jika pengirim bukan host grup sah
+              final senderHostUid = data?['host_uid'] as String?;
+              if (_expectedHostUid != null &&
+                  senderHostUid != null &&
+                  senderHostUid != _expectedHostUid) {
+                debugPrint(
+                    'Peringatan: group_ended ditolak dari pengirim ilegal: $senderHostUid');
+                return;
+              }
+
               final endedGroupId = data?['group_id'] as String? ?? groupId;
               _groupEndedStreamController?.add(endedGroupId);
             } catch (e) {
@@ -245,7 +304,7 @@ class LocationService {
         if (_groupDestination != null) {
           _channel?.sendBroadcastMessage(
             event: 'destination_update',
-            payload: _groupDestination!.toMap(),
+            payload: _destinationPayload(_groupDestination!),
           );
         }
         // Minta anggota lain untuk mengirim koordinat & tujuan mereka
@@ -285,6 +344,18 @@ class LocationService {
     }
   }
 
+  Map<String, dynamic> _destinationPayload(
+    DestinationTarget target, [
+    String? hostUid,
+  ]) {
+    final payload = Map<String, dynamic>.from(target.toMap());
+    final effective = hostUid ?? _expectedHostUid;
+    if (effective != null && effective.isNotEmpty) {
+      payload['host_uid'] = effective;
+    }
+    return payload;
+  }
+
   void _emitDestination() {
     if (_destinationStreamController != null &&
         !_destinationStreamController!.isClosed) {
@@ -297,8 +368,15 @@ class LocationService {
     required String groupId,
     required String uid,
   }) async {
-    if (_groupLocations.containsKey(uid)) {
-      _groupLocations[uid] = _groupLocations[uid]!.copyWith(status: 'offline');
+    final authenticatedUid = _supabase.auth.currentUser?.id;
+    final effectiveUid =
+        (authenticatedUid != null && authenticatedUid.isNotEmpty)
+            ? authenticatedUid
+            : uid;
+
+    if (_groupLocations.containsKey(effectiveUid)) {
+      _groupLocations[effectiveUid] =
+          _groupLocations[effectiveUid]!.copyWith(status: 'offline');
       _emitLocations();
     }
 
@@ -307,7 +385,7 @@ class LocationService {
       await channel.sendBroadcastMessage(
         event: 'status_update',
         payload: {
-          'uid': uid,
+          'uid': effectiveUid,
           'status': 'offline',
           'timestamp': DateTime.now().millisecondsSinceEpoch,
         },
@@ -330,6 +408,7 @@ class LocationService {
   Future<void> cleanupGroupLocations(String groupId) async {
     _groupLocations.clear();
     _groupDestination = null;
+    _expectedHostUid = null;
     _emitLocations();
     _emitDestination();
     _channel?.unsubscribe();
@@ -338,15 +417,23 @@ class LocationService {
   }
 
   /// Broadcast event bahwa perjalanan grup telah diakhiri oleh Host.
-  Future<void> broadcastGroupEnded(String groupId) async {
+  Future<void> broadcastGroupEnded(String groupId, {String? hostUid}) async {
     final channel = _ensureChannel(groupId);
+    final currentUid = _supabase.auth.currentUser?.id;
+    final effectiveHostUid = hostUid ?? _expectedHostUid ?? currentUid;
+
+    final payload = <String, dynamic>{
+      'group_id': groupId,
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+    if (effectiveHostUid != null && effectiveHostUid.isNotEmpty) {
+      payload['host_uid'] = effectiveHostUid;
+    }
+
     try {
       await channel.sendBroadcastMessage(
         event: 'group_ended',
-        payload: {
-          'group_id': groupId,
-          'timestamp': DateTime.now().toIso8601String(),
-        },
+        payload: payload,
       );
     } catch (e) {
       debugPrint('Error broadcasting group_ended: $e');
@@ -358,8 +445,15 @@ class LocationService {
     required String groupId,
     required String uid,
   }) async {
-    if (_groupLocations.containsKey(uid)) {
-      _groupLocations[uid] = _groupLocations[uid]!.copyWith(status: 'sos');
+    final authenticatedUid = _supabase.auth.currentUser?.id;
+    final effectiveUid =
+        (authenticatedUid != null && authenticatedUid.isNotEmpty)
+            ? authenticatedUid
+            : uid;
+
+    if (_groupLocations.containsKey(effectiveUid)) {
+      _groupLocations[effectiveUid] =
+          _groupLocations[effectiveUid]!.copyWith(status: 'sos');
       _emitLocations();
     }
 
@@ -368,7 +462,7 @@ class LocationService {
       await channel.sendBroadcastMessage(
         event: 'status_update',
         payload: {
-          'uid': uid,
+          'uid': effectiveUid,
           'status': 'sos',
           'timestamp': DateTime.now().millisecondsSinceEpoch,
         },
@@ -383,8 +477,15 @@ class LocationService {
     required String groupId,
     required String uid,
   }) async {
-    if (_groupLocations.containsKey(uid)) {
-      _groupLocations[uid] = _groupLocations[uid]!.copyWith(status: 'online');
+    final authenticatedUid = _supabase.auth.currentUser?.id;
+    final effectiveUid =
+        (authenticatedUid != null && authenticatedUid.isNotEmpty)
+            ? authenticatedUid
+            : uid;
+
+    if (_groupLocations.containsKey(effectiveUid)) {
+      _groupLocations[effectiveUid] =
+          _groupLocations[effectiveUid]!.copyWith(status: 'online');
       _emitLocations();
     }
 
@@ -393,7 +494,7 @@ class LocationService {
       await channel.sendBroadcastMessage(
         event: 'status_update',
         payload: {
-          'uid': uid,
+          'uid': effectiveUid,
           'status': 'online',
           'timestamp': DateTime.now().millisecondsSinceEpoch,
         },

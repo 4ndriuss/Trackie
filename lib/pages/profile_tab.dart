@@ -47,7 +47,7 @@ class _ProfileTabState extends State<ProfileTab> {
               if (!context.mounted) return;
               await context.read<AuthProvider>().logout();
               if (context.mounted) {
-                Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+                Navigator.pushNamedAndRemoveUntil(context, '/', (route) => false);
               }
             },
             child: Text('Log Out', style: GoogleFonts.urbanist(color: Colors.redAccent, fontWeight: FontWeight.bold)),
@@ -290,10 +290,9 @@ class _ProfileTabState extends State<ProfileTab> {
                       },
                     ),
                     const SizedBox(height: 12),
-                    Builder(
-                      builder: (context) {
-                        final locationProvider = context.watch<LocationProvider>();
-                        final isGhostMode = locationProvider.isGhostMode;
+                    Selector<LocationProvider, bool>(
+                      selector: (_, lp) => lp.isGhostMode,
+                      builder: (context, isGhostMode, _) {
                         return ProfileMenuTile(
                           icon: isGhostMode
                               ? Icons.visibility_off_outlined

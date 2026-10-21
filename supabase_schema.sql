@@ -120,10 +120,11 @@ CREATE INDEX IF NOT EXISTS idx_groups_member_uids ON public.groups USING gin (me
 
 -- Fungsi Validasi Batas Grup Berdasarkan Plan Subscription (Server-Side Enforcement)
 -- Free: maks 2 grup | Premium Aktif: maks 20 grup
+-- Menggunakan VOLATILE dan pg_advisory_xact_lock untuk mencegah race condition (TOCTOU, BACK-02)
 CREATE OR REPLACE FUNCTION public.can_create_or_join_group(p_uid uuid)
 RETURNS boolean
 LANGUAGE plpgsql
-STABLE
+VOLATILE
 SECURITY DEFINER
 SET search_path = ''
 AS $$
@@ -137,6 +138,9 @@ BEGIN
   IF p_uid IS NULL THEN
     RETURN false;
   END IF;
+
+  -- Kunci level transaksi pada ID pengguna (Advisory Lock) anti-TOCTOU
+  PERFORM pg_advisory_xact_lock(hashtext(p_uid::text));
 
   SELECT coalesce(plan, 'free'),
          coalesce(subscription_status, 'active'),
@@ -213,12 +217,23 @@ ALTER TABLE public.groups       ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.trip_history ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "profiles_select_own" ON public.profiles;
+DROP POLICY IF EXISTS "profiles_select_group_members" ON public.profiles;
 DROP POLICY IF EXISTS "profiles_insert_own" ON public.profiles;
 DROP POLICY IF EXISTS "profiles_update_own" ON public.profiles;
 DROP POLICY IF EXISTS "profiles_delete_own" ON public.profiles;
 
-CREATE POLICY "profiles_select_own" ON public.profiles
-  FOR SELECT TO authenticated USING ((SELECT auth.uid()) = id);
+-- Anggota grup dapat saling membaca profil dalam grup touring aktif (BACK-04)
+CREATE POLICY "profiles_select_group_members" ON public.profiles
+  FOR SELECT TO authenticated
+  USING (
+    (SELECT auth.uid()) = id
+    OR EXISTS (
+      SELECT 1 FROM public.groups g
+       WHERE g.status = 'active'
+         AND (SELECT auth.uid())::text = ANY (g.member_uids)
+         AND public.profiles.id::text = ANY (g.member_uids)
+    )
+  );
 CREATE POLICY "profiles_insert_own" ON public.profiles
   FOR INSERT TO authenticated WITH CHECK ((SELECT auth.uid()) = id);
 CREATE POLICY "profiles_update_own" ON public.profiles
@@ -231,7 +246,7 @@ GRANT UPDATE (
   name, vehicle, phone, birth_date, avatar_url, has_seen_subscription_page
 ) ON public.profiles TO authenticated;
 
--- Trigger proteksi: cegah modifikasi kolom langganan selain oleh service_role
+-- Trigger proteksi: cegah modifikasi kolom langganan selain oleh service_role (BACK-01)
 CREATE OR REPLACE FUNCTION public.protect_profile_subscription_fields()
 RETURNS TRIGGER
 LANGUAGE plpgsql
@@ -239,24 +254,41 @@ SECURITY DEFINER
 SET search_path = ''
 AS $$
 BEGIN
-  IF (NEW.plan IS DISTINCT FROM OLD.plan)
-     OR (NEW.subscription_status IS DISTINCT FROM OLD.subscription_status)
-     OR (NEW.subscription_expires_at IS DISTINCT FROM OLD.subscription_expires_at) THEN
+  -- Pada saat INSERT: Jika bukan dieksekusi oleh service_role, paksa nilai default aman
+  IF TG_OP = 'INSERT' THEN
     IF COALESCE(auth.role(), '') != 'service_role' THEN
-      RAISE EXCEPTION 'Akses ditolak: Kolom paket dan langganan hanya dapat diperbarui oleh sistem / service role backend.';
+      NEW.plan := 'free';
+      NEW.subscription_status := 'active';
+      NEW.subscription_expires_at := NULL;
     END IF;
+    RETURN NEW;
   END IF;
+
+  -- Pada saat UPDATE: Larang modifikasi kolom sensitif selain oleh service_role
+  IF TG_OP = 'UPDATE' THEN
+    IF (NEW.plan IS DISTINCT FROM OLD.plan)
+       OR (NEW.subscription_status IS DISTINCT FROM OLD.subscription_status)
+       OR (NEW.subscription_expires_at IS DISTINCT FROM OLD.subscription_expires_at) THEN
+      IF COALESCE(auth.role(), '') != 'service_role' THEN
+        RAISE EXCEPTION 'Akses ditolak: Kolom paket dan langganan hanya dapat diperbarui oleh sistem / service role backend.';
+      END IF;
+    END IF;
+    RETURN NEW;
+  END IF;
+
   RETURN NEW;
 END;
 $$;
 
 DROP TRIGGER IF EXISTS trg_protect_profile_subscription ON public.profiles;
 CREATE TRIGGER trg_protect_profile_subscription
-  BEFORE UPDATE ON public.profiles
+  BEFORE INSERT OR UPDATE ON public.profiles
   FOR EACH ROW
   EXECUTE FUNCTION public.protect_profile_subscription_fields();
-CREATE POLICY "profiles_delete_own" ON public.profiles
-  FOR DELETE TO authenticated USING ((SELECT auth.uid()) = id);
+
+-- Hapus policy DELETE langsung pada tabel profiles (BACK-01)
+-- Penghapusan profil pengguna wajib dilakukan via RPC delete_my_account()
+DROP POLICY IF EXISTS "profiles_delete_own" ON public.profiles;
 
 DROP POLICY IF EXISTS "groups_select_members" ON public.groups;
 DROP POLICY IF EXISTS "groups_insert_as_host" ON public.groups;
@@ -302,6 +334,9 @@ BEGIN
   IF v_uid IS NULL THEN
     RAISE EXCEPTION 'not authenticated';
   END IF;
+
+  -- Kunci transaksi pengguna untuk mencegah TOCTOU (BACK-02)
+  PERFORM pg_advisory_xact_lock(hashtext(v_uid::text));
 
   SELECT * INTO v_group
     FROM public.groups
@@ -381,6 +416,29 @@ AS $$
      AND status = 'active';
 $$;
 
+-- Memastikan perubahan destinasi konvoi hanya sah jika dieksekusi oleh host grup yang aktif (BACK-03)
+CREATE OR REPLACE FUNCTION public.set_group_destination(
+  p_group_id uuid,
+  p_destination text
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+BEGIN
+  UPDATE public.groups
+     SET destination = trim(p_destination)
+   WHERE id = p_group_id
+     AND host_uid = auth.uid()
+     AND status = 'active';
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Akses ditolak: Hanya Host grup yang berhak mengubah titik tujuan atau grup telah berakhir.';
+  END IF;
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.delete_my_account()
 RETURNS void
 LANGUAGE plpgsql
@@ -411,14 +469,57 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.join_group(text)        FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.leave_group(uuid)       FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.end_group(uuid)         FROM PUBLIC, anon;
-REVOKE ALL ON FUNCTION public.delete_my_account()     FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.join_group(text)     TO authenticated;
-GRANT EXECUTE ON FUNCTION public.leave_group(uuid)    TO authenticated;
-GRANT EXECUTE ON FUNCTION public.end_group(uuid)      TO authenticated;
-GRANT EXECUTE ON FUNCTION public.delete_my_account()  TO authenticated;
+REVOKE ALL ON FUNCTION public.join_group(text)             FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.leave_group(uuid)            FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.end_group(uuid)              FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.set_group_destination(uuid, text) FROM PUBLIC, anon;
+REVOKE ALL ON FUNCTION public.delete_my_account()          FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.join_group(text)          TO authenticated;
+GRANT EXECUTE ON FUNCTION public.leave_group(uuid)         TO authenticated;
+GRANT EXECUTE ON FUNCTION public.end_group(uuid)           TO authenticated;
+GRANT EXECUTE ON FUNCTION public.set_group_destination(uuid, text) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.delete_my_account()       TO authenticated;
+
+-- RPC Simulasi Langganan untuk Dev / Mock Testing (BUG-02)
+CREATE OR REPLACE FUNCTION public.dev_simulate_subscription(
+  p_plan text,
+  p_status text DEFAULT 'active',
+  p_expires_at timestamptz DEFAULT NULL
+)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+  v_uid uuid := auth.uid();
+  v_valid_plan text;
+  v_valid_status text;
+BEGIN
+  IF v_uid IS NULL THEN
+    RAISE EXCEPTION 'not authenticated';
+  END IF;
+
+  v_valid_plan := lower(trim(p_plan));
+  IF v_valid_plan NOT IN ('free', 'premium') THEN
+    v_valid_plan := 'free';
+  END IF;
+
+  v_valid_status := lower(trim(coalesce(p_status, 'active')));
+  IF v_valid_status NOT IN ('active', 'expired', 'canceled') THEN
+    v_valid_status := 'active';
+  END IF;
+
+  UPDATE public.profiles
+     SET plan = v_valid_plan,
+         subscription_status = v_valid_status,
+         subscription_expires_at = p_expires_at
+   WHERE id = v_uid;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.dev_simulate_subscription(text, text, timestamptz) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.dev_simulate_subscription(text, text, timestamptz) TO authenticated;
 
 -- 7. Storage Bucket untuk Avatar Pengguna (Batas 5 MB & Whitelist MIME Type)
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types)

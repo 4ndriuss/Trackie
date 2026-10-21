@@ -195,6 +195,7 @@ Future<void> _onStart(ServiceInstance service) async {
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
           distanceFilter: 10, // Minimum 10 meter perpindahan
+          timeLimit: Duration(seconds: 4), // Mencegah penumpukan kueri paralel (BUG-07)
         ),
       );
 

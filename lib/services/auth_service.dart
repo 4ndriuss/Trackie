@@ -2,9 +2,7 @@
 // Service untuk menangani autentikasi pengguna menggunakan Supabase Auth
 // dan menyimpan/mengambil data profil dari tabel PostgreSQL 'profiles'.
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user_model.dart';
 import '../supabase_config.dart';
@@ -24,7 +22,11 @@ extension SupabaseUserExtension on User {
 
 /// [AuthService] menyediakan semua operasi terkait autentikasi dan profil pengguna.
 class AuthService {
-  SupabaseClient get _supabase => SupabaseConfig.client;
+  final SupabaseClient? _injectedClient;
+
+  AuthService({SupabaseClient? supabaseClient}) : _injectedClient = supabaseClient;
+
+  SupabaseClient get _supabase => _injectedClient ?? SupabaseConfig.client;
 
   static const int _maxAvatarBytes = 5 * 1024 * 1024; // 5 MB
   static const Map<String, String> _allowedImageMimeTypes = {
@@ -165,46 +167,11 @@ class AuthService {
     }
   }
 
-  /// Login dengan Facebook
+  /// Login dengan Facebook (DEP-03: Dormant - belum dikonfigurasi resmi dengan Meta App ID)
   Future<AuthResponse?> signInWithFacebook() async {
-    try {
-      final LoginResult result = await FacebookAuth.instance.login();
-      if (result.status == LoginStatus.success && result.accessToken != null) {
-        final response = await _supabase.auth.signInWithIdToken(
-          provider: OAuthProvider.facebook,
-          idToken: result.accessToken!.tokenString,
-        );
-
-        if (response.user != null) {
-          await _ensureUserProfileExists(response.user!);
-        }
-        return response;
-      } else if (result.status == LoginStatus.cancelled) {
-        debugPrint('Facebook login cancelled by user');
-        return null;
-      } else {
-        debugPrint('Facebook login failed: ${result.message}');
-        throw AuthException(
-          result.message ?? 'Login dengan Facebook tidak berhasil. Silakan coba lagi.',
-        );
-      }
-    } on PlatformException catch (e) {
-      debugPrint('Facebook SDK PlatformException: ${e.code} - ${e.message}');
-      throw const AuthException(
-        'Facebook Login belum dikonfigurasi pada perangkat ini.',
-      );
-    } on MissingPluginException catch (e) {
-      debugPrint('Facebook SDK MissingPluginException: ${e.message}');
-      throw const AuthException(
-        'Facebook Login tidak didukung pada platform ini.',
-      );
-    } catch (e) {
-      debugPrint('Error signing in with Facebook: $e');
-      if (e is AuthException) rethrow;
-      throw AuthException(
-        'Terjadi kesalahan saat masuk dengan Facebook: $e',
-      );
-    }
+    throw const AuthException(
+      'Facebook Login belum dikonfigurasi pada perangkat ini.',
+    );
   }
 
   /// Keluar dari akun.

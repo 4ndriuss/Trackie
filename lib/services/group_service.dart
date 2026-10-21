@@ -8,7 +8,11 @@ import '../supabase_config.dart';
 
 /// [GroupService] menyediakan operasi CRUD untuk tabel 'groups' di Supabase.
 class GroupService {
-  SupabaseClient get _supabase => SupabaseConfig.client;
+  final SupabaseClient? _injectedClient;
+
+  GroupService({SupabaseClient? supabaseClient}) : _injectedClient = supabaseClient;
+
+  SupabaseClient get _supabase => _injectedClient ?? SupabaseConfig.client;
 
   /// Membuat kode undangan unik secara kriptografis dengan format TRG-XXXXXX.
   String _generateInviteCode() {

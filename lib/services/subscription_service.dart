@@ -58,7 +58,12 @@ abstract class SubscriptionService {
 /// Menyimpan data secara lokal di [SharedPreferences] sekaligus menyinkronkan ke
 /// dokumen user di Supabase (`public.profiles` dan `auth.users` metadata).
 class MockSubscriptionService implements SubscriptionService {
-  SupabaseClient get _supabase => SupabaseConfig.client;
+  final SupabaseClient? _injectedClient;
+
+  MockSubscriptionService({SupabaseClient? supabaseClient})
+      : _injectedClient = supabaseClient;
+
+  SupabaseClient get _supabase => _injectedClient ?? SupabaseConfig.client;
 
   static String _prefsKey(String uid) => 'trackie_subscription_$uid';
   static String _seenKey(String uid) => 'trackie_has_seen_sub_$uid';
@@ -266,18 +271,27 @@ class MockSubscriptionService implements SubscriptionService {
   Future<void> _persistAll(String uid, SubscriptionInfo info) async {
     await _saveLocal(uid, info);
 
-    // 1. Simpan ke tabel public.profiles di Supabase
+    // 1. Simpan status has_seen_subscription_page ke tabel public.profiles (diizinkan oleh RLS)
     try {
       await _supabase.from('profiles').update({
-        'plan': info.plan.value,
-        'subscription_status': info.effectiveStatus.value,
-        'subscription_expires_at': info.expiresAt?.toIso8601String(),
         'has_seen_subscription_page': info.hasSeenSubscriptionPage,
       }).eq('id', uid);
     } catch (e) {
-      debugPrint(
-        'Info: kolom subscription di tabel profiles belum dimigrasi atau gagal diupdate ($e). Menyimpan ke user_metadata.',
-      );
+      debugPrint('Info saving has_seen_subscription_page to profiles: $e');
+    }
+
+    // 2. Sinkronkan plan ke profiles melalui RPC dev_simulate_subscription saat mode debug (BUG-02)
+    //    Memastikan kolom profiles.plan sinkron sehingga kuota can_create_or_join_group valid.
+    if (kDebugMode) {
+      try {
+        await _supabase.rpc('dev_simulate_subscription', params: {
+          'p_plan': info.plan.value,
+          'p_status': info.effectiveStatus.value,
+          'p_expires_at': info.expiresAt?.toIso8601String(),
+        });
+      } catch (e) {
+        debugPrint('Info dev_simulate_subscription fallback: $e');
+      }
     }
 
     // 2. Sinkronkan juga ke user_metadata Supabase Auth sebagai cadangan lintas perangkat

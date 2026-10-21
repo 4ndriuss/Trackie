@@ -15,8 +15,11 @@ import '../services/background_location_service.dart';
 import '../services/permission_service.dart';
 import '../services/routing_service.dart';
 import '../services/haversine_utils.dart';
+import '../services/trip_service.dart';
 import '../models/location_model.dart';
 import '../models/trip_history_model.dart';
+import '../models/group_model.dart';
+import 'group_provider.dart';
 import '../supabase_config.dart';
 
 /// [LocationProvider] mengelola:
@@ -54,6 +57,8 @@ class LocationProvider extends ChangeNotifier with WidgetsBindingObserver {
   LatLng? _lastRoutedOrigin;
   LatLng? _lastRoutedDestination;
   DateTime? _lastRouteFetchTime;
+  DateTime? _lastBroadcastTime;
+  Position? _lastBroadcastPosition;
 
   final List<LatLng> _recordedPath = [];
   DateTime? _tripStartedAt;
@@ -121,8 +126,10 @@ class LocationProvider extends ChangeNotifier with WidgetsBindingObserver {
     String? tripName,
     String? initialDestination,
     String vehicleType = 'motor',
+    String? hostUid,
   }) async {
     stopListening();
+    _locationService.setExpectedHostUid(hostUid);
     _isTracking = true;
     _currentGroupId = groupId;
     _currentUid = uid;
@@ -249,6 +256,22 @@ class LocationProvider extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
+  /// Melakukan downsampling titik jejak koordinat agar ukuran data ringan untuk disimpan ke JSONB (PERF-18).
+  static List<LatLng> downsamplePoints(List<LatLng> points, {int maxPoints = 100}) {
+    if (points.length <= maxPoints) {
+      return List<LatLng>.from(points);
+    }
+    final step = (points.length / (maxPoints - 1)).ceil();
+    final result = <LatLng>[];
+    for (int i = 0; i < points.length; i += step) {
+      result.add(points[i]);
+    }
+    if (result.isEmpty || result.last != points.last) {
+      result.add(points.last);
+    }
+    return result;
+  }
+
   /// Menyusun objek [TripHistoryModel] saat perjalanan selesai untuk disimpan ke Supabase.
   TripHistoryModel buildCompletedTripHistory({
     required String groupName,
@@ -271,22 +294,12 @@ class LocationProvider extends ChangeNotifier with WidgetsBindingObserver {
     if (pathPoints.length < 2 &&
         _activeRoute != null &&
         _activeRoute!.points.isNotEmpty) {
-      // Sampling titik rute agar penyimpanan JSONB di database tetap ringan & cepat
-      final rawRoute = _activeRoute!.points;
-      if (rawRoute.length <= 80) {
-        pathPoints = List<LatLng>.from(rawRoute);
-      } else {
-        final step = (rawRoute.length / 80).ceil();
-        pathPoints = [
-          for (int i = 0; i < rawRoute.length; i += step) rawRoute[i],
-          rawRoute.last,
-        ];
-      }
+      pathPoints = downsamplePoints(_activeRoute!.points, maxPoints: 100);
     } else if (pathPoints.length == 1 && _destinationTarget != null) {
       pathPoints.add(_destinationTarget!.point);
     }
 
-    // Hitung total jarak tempuh (km)
+    // Hitung total jarak tempuh (km) menggunakan seluruh titik GPS terekam agar akurat
     double totalMeters = 0.0;
     for (int i = 1; i < pathPoints.length; i++) {
       totalMeters += HaversineUtils.distanceInMeters(
@@ -322,7 +335,9 @@ class LocationProvider extends ChangeNotifier with WidgetsBindingObserver {
       role: isHost ? 'Host' : 'Member',
     );
 
-    final routePathMaps = pathPoints
+    // Downsampling titik rute sebelum disimpan ke JSONB PostgreSQL (PERF-18)
+    final savedPoints = downsamplePoints(pathPoints, maxPoints: 100);
+    final routePathMaps = savedPoints
         .map(
           (p) => <String, double>{
             'lat': double.parse(p.latitude.toStringAsFixed(6)),
@@ -342,6 +357,63 @@ class LocationProvider extends ChangeNotifier with WidgetsBindingObserver {
       startedAt: startedAt,
       endedAt: endedAt,
     );
+  }
+
+  /// Orkestrasi selesai perjalanan terpadu (ARCH-06).
+  /// Menyimpan riwayat perjalanan ke Supabase (dengan fallback offline aman BUG-01),
+  /// menyiarkan event group_ended jika dipanggil oleh Host,
+  /// menghentikan background & foreground tracking, serta mengakhiri/meninggalkan grup.
+  Future<bool> completeAndEndTrip({
+    required String? uid,
+    required GroupModel? activeGroup,
+    required bool isHost,
+    required GroupProvider groupProvider,
+    TripService? tripService,
+  }) async {
+    final effectiveTripService = tripService ?? TripService();
+    final groupId = activeGroup?.id;
+    bool tripSavedSuccessfully = false;
+
+    // 1. Susun & simpan riwayat perjalanan sebelum menghentikan state tracking (BUG-01)
+    if (uid != null && activeGroup != null) {
+      try {
+        final completedTrip = buildCompletedTripHistory(
+          groupName: activeGroup.name,
+          rawDestination: activeGroup.destination,
+          groupType: activeGroup.type,
+          isHost: isHost,
+          fallbackMemberCount: activeGroup.memberCount,
+          groupCreatedAt: activeGroup.createdAt,
+        );
+        await effectiveTripService.saveTrip(uid: uid, trip: completedTrip);
+        tripSavedSuccessfully = true;
+      } catch (e) {
+        debugPrint('Error saving trip history on finish: $e');
+      }
+    }
+
+    // 2. Siarkan event group_ended jika Host, agar semua anggota langsung terinfo
+    if (isHost && groupId != null) {
+      try {
+        await broadcastGroupEnded(groupId);
+      } catch (e) {
+        debugPrint('Error broadcasting group_ended: $e');
+      }
+    }
+
+    // 3. Hentikan tracking lokasi
+    await stopTracking(groupId: groupId, uid: uid);
+
+    // 4. Akhiri grup (jika Host) atau keluar grup (jika Member)
+    if (uid != null && groupId != null) {
+      if (isHost) {
+        await groupProvider.endGroup();
+      } else {
+        await groupProvider.leaveGroup(uid: uid);
+      }
+    }
+
+    return tripSavedSuccessfully;
   }
 
   /// Mengambil lokasi GPS asli secepat mungkin:
@@ -401,17 +473,47 @@ class LocationProvider extends ChangeNotifier with WidgetsBindingObserver {
         final isFirstFix = _currentPosition == null;
         _currentPosition = pos;
         _recordPoint(pos.latitude, pos.longitude);
-        if (!_isGhostMode) {
-          unawaited(
-            _locationService.updateLocation(
-              groupId: groupId,
-              uid: uid,
-              name: userName,
-              lat: pos.latitude,
-              lng: pos.longitude,
-              status: _currentMemberStatus,
-            ),
-          );
+
+        // Throttling broadcast WebSocket (PERF-02):
+        // Kirim WebSocket jika:
+        // 1. Fix GPS pertama kali
+        // 2. Status darurat SOS (harus instan tanpa delay)
+        // 3. Sudah lewat >= 3 detik sejak broadcast terakhir
+        // 4. Atau telah berpindah >= 50 meter sejak broadcast terakhir
+        final now = DateTime.now();
+        final isSOS = _currentMemberStatus == 'sos';
+        final timeSinceLast = _lastBroadcastTime == null
+            ? const Duration(seconds: 999)
+            : now.difference(_lastBroadcastTime!);
+        final distSinceLast = _lastBroadcastPosition == null
+            ? 999.0
+            : HaversineUtils.distanceInMeters(
+                _lastBroadcastPosition!.latitude,
+                _lastBroadcastPosition!.longitude,
+                pos.latitude,
+                pos.longitude,
+              );
+
+        final shouldBroadcast = isFirstFix ||
+            isSOS ||
+            timeSinceLast.inMilliseconds >= 3000 ||
+            distSinceLast >= 50.0;
+
+        if (shouldBroadcast) {
+          _lastBroadcastTime = now;
+          _lastBroadcastPosition = pos;
+          if (!_isGhostMode) {
+            unawaited(
+              _locationService.updateLocation(
+                groupId: groupId,
+                uid: uid,
+                name: userName,
+                lat: pos.latitude,
+                lng: pos.longitude,
+                status: _currentMemberStatus,
+              ),
+            );
+          }
         }
         _maybeRefreshRouteForCurrentPosition(forceIfFirstFix: isFirstFix);
         notifyListeners();
@@ -681,6 +783,8 @@ class LocationProvider extends ChangeNotifier with WidgetsBindingObserver {
     _lastRoutedDestination = null;
     _recordedPath.clear();
     _tripStartedAt = null;
+    _lastBroadcastTime = null;
+    _lastBroadcastPosition = null;
     notifyListeners();
   }
 
@@ -708,6 +812,8 @@ class LocationProvider extends ChangeNotifier with WidgetsBindingObserver {
       final isFirstFix = _currentPosition == null;
       _currentPosition = pos;
       _recordPoint(pos.latitude, pos.longitude);
+      _lastBroadcastTime = DateTime.now();
+      _lastBroadcastPosition = pos;
       if (!_isGhostMode) {
         await _locationService.updateLocation(
           groupId: groupId,
