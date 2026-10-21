@@ -4,6 +4,7 @@
 // ala Google Maps menggunakan OpenStreetMap (flutter_map + OSRM + Nominatim).
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -41,12 +42,136 @@ class GroupMember {
   bool get isOnline =>
       status == MemberStatus.online || status == MemberStatus.sos;
   bool get isSos => status == MemberStatus.sos;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is GroupMember &&
+          runtimeType == other.runtimeType &&
+          id == other.id &&
+          name == other.name &&
+          status == other.status &&
+          position == other.position &&
+          distanceMeters == other.distanceMeters;
+
+  @override
+  int get hashCode => Object.hash(id, name, status, position, distanceMeters);
 }
 
 /// Fungsi pembantu untuk memformat jarak agar mudah dibaca.
 /// Di bawah 1000m ditampilkan dalam meter (m), selain itu kilometer (km).
 String formatDistance(double m) =>
     m < 1000 ? '${m.round()} m' : '${(m / 1000).toStringAsFixed(1)} km';
+
+class _MarkerLayerData {
+  final List<GroupMember> members;
+  final DestinationTarget? destination;
+
+  const _MarkerLayerData({required this.members, this.destination});
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _MarkerLayerData &&
+          runtimeType == other.runtimeType &&
+          destination == other.destination &&
+          listEquals(members, other.members);
+
+  @override
+  int get hashCode => Object.hash(destination, Object.hashAll(members));
+}
+
+class _MapMarkersLayer extends StatelessWidget {
+  final String? currentUid;
+  final void Function(GroupMember) onFocusMember;
+  final void Function(LatLng) onFocusDestination;
+
+  const _MapMarkersLayer({
+    required this.currentUid,
+    required this.onFocusMember,
+    required this.onFocusDestination,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Selector<LocationProvider, _MarkerLayerData>(
+      selector: (_, lp) => _MarkerLayerData(
+        members: _MapPageState._resolveMembers(lp, currentUid),
+        destination: lp.destinationTarget,
+      ),
+      builder: (context, data, _) {
+        return MarkerLayer(
+          markers: _MapPageState._buildMarkers(
+            data.members,
+            data.destination,
+            onFocusMember,
+            onFocusDestination,
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _MapRouteLayer extends StatelessWidget {
+  const _MapRouteLayer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Selector<LocationProvider, RouteResult?>(
+      selector: (_, lp) => lp.activeRoute,
+      builder: (context, activeRoute, _) {
+        if (activeRoute == null || activeRoute.points.length < 2) {
+          return const SizedBox.shrink();
+        }
+        return PolylineLayer(
+          polylines: [
+            // Garis tepi luar (casing) ala Google Maps
+            Polyline(
+              points: activeRoute.points,
+              color: const Color(0xFF1E3A8A),
+              strokeWidth: 8.0,
+            ),
+            // Garis inti rute
+            Polyline(
+              points: activeRoute.points,
+              color: const Color(0xFF3B82F6),
+              strokeWidth: 5.0,
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _NavOverlayData {
+  final DestinationTarget? destination;
+  final RouteResult? route;
+  final bool isLoadingRoute;
+  final LatLng? myPosition;
+
+  const _NavOverlayData({
+    this.destination,
+    this.route,
+    required this.isLoadingRoute,
+    this.myPosition,
+  });
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _NavOverlayData &&
+          runtimeType == other.runtimeType &&
+          destination == other.destination &&
+          route == other.route &&
+          isLoadingRoute == other.isLoadingRoute &&
+          myPosition == other.myPosition;
+
+  @override
+  int get hashCode =>
+      Object.hash(destination, route, isLoadingRoute, myPosition);
+}
 
 /// [MapPage] adalah halaman utama untuk fitur pelacakan grup dan navigasi rute.
 class MapPage extends StatefulWidget {
@@ -92,6 +217,7 @@ class _MapPageState extends State<MapPage> {
 
   final MapController _mapController = MapController();
   final RoutingService _routingService = RoutingService();
+  LocationProvider? _locationProviderRef;
   bool _hasCenteredOnRealLocation = false;
   bool _hasFittedInitialRoute = false;
   bool _isPickingDestinationOnMap = false;
@@ -103,12 +229,37 @@ class _MapPageState extends State<MapPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _locationProviderRef = context.read<LocationProvider>();
+      _locationProviderRef?.addListener(_handleCameraInitialSetup);
       _initRealTimeTracking();
     });
   }
 
+  void _handleCameraInitialSetup() {
+    if (!mounted || _locationProviderRef == null) return;
+    if (!_hasCenteredOnRealLocation) {
+      final myPos = _locationProviderRef!.myLatLng;
+      if (myPos != null) {
+        _hasCenteredOnRealLocation = true;
+        _mapController.move(myPos, _initialZoom);
+      }
+    }
+    if (!_hasFittedInitialRoute) {
+      final route = _locationProviderRef!.activeRoute;
+      if (route != null && route.points.length >= 2) {
+        _hasFittedInitialRoute = true;
+        _fitRouteBounds(route);
+      }
+    }
+    if (_hasCenteredOnRealLocation && _hasFittedInitialRoute) {
+      _locationProviderRef?.removeListener(_handleCameraInitialSetup);
+    }
+  }
+
   @override
   void dispose() {
+    _locationProviderRef?.removeListener(_handleCameraInitialSetup);
     _groupEndedSubscription?.cancel();
     _mapController.dispose();
     super.dispose();
@@ -162,7 +313,7 @@ class _MapPageState extends State<MapPage> {
     );
   }
 
-  List<GroupMember> _resolveMembers(
+  static List<GroupMember> _resolveMembers(
     LocationProvider locationProvider,
     String? currentUid,
   ) {
@@ -179,29 +330,6 @@ class _MapPageState extends State<MapPage> {
           break;
         }
       }
-    }
-
-    if (!_hasCenteredOnRealLocation && myLat != null && myLng != null) {
-      final targetLat = myLat;
-      final targetLng = myLng;
-      _hasCenteredOnRealLocation = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _mapController.move(LatLng(targetLat, targetLng), _initialZoom);
-        }
-      });
-    }
-
-    if (!_hasFittedInitialRoute &&
-        locationProvider.activeRoute != null &&
-        locationProvider.activeRoute!.points.length >= 2) {
-      _hasFittedInitialRoute = true;
-      final routeToFit = locationProvider.activeRoute;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) {
-          _fitRouteBounds(routeToFit);
-        }
-      });
     }
 
     if (liveMembers.isEmpty) {
@@ -245,9 +373,11 @@ class _MapPageState extends State<MapPage> {
   }
 
   /// Mengubah list [members] dan titik tujuan menjadi kumpulan [Marker].
-  List<Marker> _buildMarkers(
+  static List<Marker> _buildMarkers(
     List<GroupMember> members,
     DestinationTarget? destinationTarget,
+    void Function(GroupMember) onFocusMember,
+    void Function(LatLng) onFocusDestination,
   ) {
     return [
       if (destinationTarget != null)
@@ -258,7 +388,7 @@ class _MapPageState extends State<MapPage> {
           height: 76,
           alignment: Alignment.topCenter,
           child: GestureDetector(
-            onTap: () => _mapController.move(destinationTarget.point, 16.0),
+            onTap: () => onFocusDestination(destinationTarget.point),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -325,7 +455,7 @@ class _MapPageState extends State<MapPage> {
           child: Opacity(
             opacity: m.isOnline ? 1.0 : 0.55,
             child: GestureDetector(
-              onTap: () => _focusOn(m),
+              onTap: () => onFocusMember(m),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
@@ -982,11 +1112,7 @@ class _MapPageState extends State<MapPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final bottomInset = MediaQuery.paddingOf(context).bottom;
-    final authProvider = context.watch<AuthProvider>();
-    final locationProvider = context.watch<LocationProvider>();
-    final members = _resolveMembers(locationProvider, authProvider.user?.uid);
-    final destinationTarget = locationProvider.destinationTarget;
-    final activeRoute = locationProvider.activeRoute;
+    final currentUid = context.select<AuthProvider, String?>((a) => a.user?.uid);
 
     return PopScope(
       canPop: _canPopNow,
@@ -1010,253 +1136,254 @@ class _MapPageState extends State<MapPage> {
               ),
           ],
         ),
-      body: LayoutBuilder(
-        builder: (context, constraints) {
-          return Stack(
-            children: [
-              // Lapisan Peta OpenStreetMap + Rute Jalan Raya
-              FlutterMap(
-                mapController: _mapController,
-                options: MapOptions(
-                  initialCenter: members.isNotEmpty
-                      ? members.first.position
-                      : _initialCenter,
-                  initialZoom: _initialZoom,
-                  onTap: (_, latlng) {
-                    if (_isPickingDestinationOnMap && widget.isHost) {
-                      _handleMapPinSelected(latlng);
-                    }
-                  },
-                  onLongPress: (_, latlng) {
-                    if (widget.isHost) {
-                      _handleMapPinSelected(latlng);
-                    }
-                  },
-                ),
-                children: [
-                  TileLayer(
-                    urlTemplate:
-                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                    userAgentPackageName: 'com.example.trackie',
+        body: LayoutBuilder(
+          builder: (context, constraints) {
+            return Stack(
+              children: [
+                // Lapisan Peta OpenStreetMap + Rute Jalan Raya
+                FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: _initialCenter,
+                    initialZoom: _initialZoom,
+                    onTap: (_, latlng) {
+                      if (_isPickingDestinationOnMap && widget.isHost) {
+                        _handleMapPinSelected(latlng);
+                      }
+                    },
+                    onLongPress: (_, latlng) {
+                      if (widget.isHost) {
+                        _handleMapPinSelected(latlng);
+                      }
+                    },
                   ),
-                  if (activeRoute != null && activeRoute.points.length >= 2)
-                    PolylineLayer(
-                      polylines: [
-                        // Garis tepi luar (casing) ala Google Maps
-                        Polyline(
-                          points: activeRoute.points,
-                          color: const Color(0xFF1E3A8A),
-                          strokeWidth: 8.0,
-                        ),
-                        // Garis inti rute
-                        Polyline(
-                          points: activeRoute.points,
-                          color: const Color(0xFF3B82F6),
-                          strokeWidth: 5.0,
-                        ),
-                      ],
-                    ),
-                  MarkerLayer(
-                    markers: _buildMarkers(members, destinationTarget),
-                  ),
-                ],
-              ),
-              // Banner Navigasi Rute + Tombol SOS Ikon di bawahnya (otomatis menyesuaikan tinggi banner agar tidak bertabrakan)
-              Positioned(
-                top: 0,
-                left: 0,
-                right: 0,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    _buildNavigationBanner(
-                      destination: destinationTarget,
-                      route: activeRoute,
-                      isLoadingRoute: locationProvider.isLoadingRoute,
-                      myPosition: locationProvider.myLatLng,
+                    TileLayer(
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.example.trackie',
                     ),
-                    Padding(
-                      padding: const EdgeInsets.only(
-                        top: 12,
-                        right: AppSpacing.md,
-                      ),
-                      child: FloatingActionButton(
-                        heroTag: 'btn_sos',
-                        tooltip: 'Sinyal Darurat (SOS)',
-                        onPressed: _triggerSOS,
-                        backgroundColor: theme.colorScheme.error,
-                        foregroundColor: Colors.white,
-                        child: const Icon(
-                          Icons.warning_amber_rounded,
-                          size: 26,
-                        ),
-                      ),
+                    const _MapRouteLayer(),
+                    _MapMarkersLayer(
+                      currentUid: currentUid,
+                      onFocusMember: _focusOn,
+                      onFocusDestination: (point) =>
+                          _mapController.move(point, 16.0),
                     ),
                   ],
                 ),
-              ),
-              // Lapisan Panel Bawah yang dapat digeser (Draggable)
-              DraggableScrollableSheet(
-                initialChildSize: 0.28,
-                minChildSize: 0.15,
-                maxChildSize: 0.6,
-                snap: true,
-                builder: (_, scrollController) => Material(
-                  color: theme.colorScheme.surface,
-                  elevation: 8,
-                  clipBehavior: Clip.antiAlias,
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(16)),
-                  child: CustomScrollView(
-                    controller: scrollController,
-                    slivers: [
-                      // Header panel
-                      SliverToBoxAdapter(
-                        child: Column(
-                          children: [
-                            Container(
-                              margin: const EdgeInsets.symmetric(
-                                vertical: AppSpacing.sm,
-                              ),
-                              width: 40,
-                              height: 4,
-                              decoration: BoxDecoration(
-                                color: theme.dividerColor,
-                                borderRadius: BorderRadius.circular(2),
-                              ),
-                            ),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: AppSpacing.md,
-                              ),
-                              child: Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      'Anggota Grup (${members.length})',
-                                      style:
-                                          theme.textTheme.titleMedium?.copyWith(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                  TextButton.icon(
-                                    onPressed: _confirmLeave,
-                                    style: TextButton.styleFrom(
-                                      foregroundColor: widget.isHost
-                                          ? AppTheme.primary
-                                          : theme.colorScheme.error,
-                                    ),
-                                    icon: Icon(
-                                      widget.isHost
-                                          ? Icons.flag_circle_rounded
-                                          : Icons.exit_to_app,
-                                    ),
-                                    label: Text(
-                                      widget.isHost
-                                          ? 'Selesai'
-                                          : 'Keluar',
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const Divider(height: 1),
-                          ],
+                // Banner Navigasi Rute + Tombol SOS Ikon di bawahnya (otomatis menyesuaikan tinggi banner agar tidak bertabrakan)
+                Positioned(
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Selector<LocationProvider, _NavOverlayData>(
+                        selector: (_, lp) => _NavOverlayData(
+                          destination: lp.destinationTarget,
+                          route: lp.activeRoute,
+                          isLoadingRoute: lp.isLoadingRoute,
+                          myPosition: lp.myLatLng,
                         ),
-                      ),
-                      // Daftar anggota grup
-                      SliverList.builder(
-                        itemCount: members.length,
-                        itemBuilder: (_, i) {
-                          final m = members[i];
-                          return ListTile(
-                            onTap: () => _focusOn(m),
-                            tileColor: m.isSos
-                                ? theme.colorScheme.error.withValues(alpha: 0.1)
-                                : null,
-                            leading: Stack(
-                              children: [
-                                CircleAvatar(
-                                  backgroundColor:
-                                      m.isSos ? theme.colorScheme.error : null,
-                                  foregroundColor:
-                                      m.isSos ? Colors.white : null,
-                                  child: Icon(
-                                    m.isSos ? Icons.warning : Icons.person,
-                                  ),
-                                ),
-                                Positioned(
-                                  right: 0,
-                                  bottom: 0,
-                                  child: Container(
-                                    width: 12,
-                                    height: 12,
-                                    decoration: BoxDecoration(
-                                      color: m.isSos
-                                          ? theme.colorScheme.error
-                                          : (m.isOnline
-                                              ? Colors.green
-                                              : Colors.grey),
-                                      shape: BoxShape.circle,
-                                      border: Border.all(
-                                        color: theme.colorScheme.surface,
-                                        width: 2,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                            title: Text(
-                              m.name,
-                              style: TextStyle(
-                                fontWeight: m.isSos
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                                color: m.isSos ? theme.colorScheme.error : null,
-                              ),
-                            ),
-                            subtitle: Text(
-                              m.isSos
-                                  ? '🚨 BUTUH BANTUAN!'
-                                  : (m.isOnline
-                                      ? 'Terhubung'
-                                      : 'Terputus sinyal'),
-                              style: TextStyle(
-                                color: m.isSos ? theme.colorScheme.error : null,
-                                fontWeight: m.isSos
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                              ),
-                            ),
-                            trailing: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text('Jarak', style: theme.textTheme.labelSmall),
-                                Text(
-                                  formatDistance(m.distanceMeters),
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
+                        builder: (context, navData, _) {
+                          return _buildNavigationBanner(
+                            destination: navData.destination,
+                            route: navData.route,
+                            isLoadingRoute: navData.isLoadingRoute,
+                            myPosition: navData.myPosition,
                           );
                         },
                       ),
-                      SliverToBoxAdapter(child: SizedBox(height: bottomInset)),
+                      Padding(
+                        padding: const EdgeInsets.only(
+                          top: 12,
+                          right: AppSpacing.md,
+                        ),
+                        child: FloatingActionButton(
+                          heroTag: 'btn_sos',
+                          tooltip: 'Sinyal Darurat (SOS)',
+                          onPressed: _triggerSOS,
+                          backgroundColor: theme.colorScheme.error,
+                          foregroundColor: Colors.white,
+                          child: const Icon(
+                            Icons.warning_amber_rounded,
+                            size: 26,
+                          ),
+                        ),
+                      ),
                     ],
                   ),
                 ),
-              ),
-            ],
-          );
-        },
+                // Lapisan Panel Bawah yang dapat digeser (Draggable)
+                DraggableScrollableSheet(
+                  initialChildSize: 0.28,
+                  minChildSize: 0.15,
+                  maxChildSize: 0.6,
+                  snap: true,
+                  builder: (_, scrollController) => Material(
+                    color: theme.colorScheme.surface,
+                    elevation: 8,
+                    clipBehavior: Clip.antiAlias,
+                    borderRadius:
+                        const BorderRadius.vertical(top: Radius.circular(16)),
+                    child: Selector<LocationProvider, List<GroupMember>>(
+                      selector: (_, lp) => _resolveMembers(lp, currentUid),
+                      builder: (context, members, _) {
+                        return CustomScrollView(
+                          controller: scrollController,
+                          slivers: [
+                            // Header panel
+                            SliverToBoxAdapter(
+                              child: Column(
+                                children: [
+                                  Container(
+                                    margin: const EdgeInsets.symmetric(
+                                      vertical: AppSpacing.sm,
+                                    ),
+                                    width: 40,
+                                    height: 4,
+                                    decoration: BoxDecoration(
+                                      color: theme.dividerColor,
+                                      borderRadius: BorderRadius.circular(2),
+                                    ),
+                                  ),
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: AppSpacing.md,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            'Anggota Grup (${members.length})',
+                                            style:
+                                                theme.textTheme.titleMedium?.copyWith(
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ),
+                                        TextButton.icon(
+                                          onPressed: _confirmLeave,
+                                          style: TextButton.styleFrom(
+                                            foregroundColor: widget.isHost
+                                                ? AppTheme.primary
+                                                : theme.colorScheme.error,
+                                          ),
+                                          icon: Icon(
+                                            widget.isHost
+                                                ? Icons.flag_circle_rounded
+                                                : Icons.exit_to_app,
+                                          ),
+                                          label: Text(
+                                            widget.isHost
+                                                ? 'Selesai'
+                                                : 'Keluar',
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const Divider(height: 1),
+                                ],
+                              ),
+                            ),
+                            // Daftar anggota grup
+                            SliverList.builder(
+                              itemCount: members.length,
+                              itemBuilder: (_, i) {
+                                final m = members[i];
+                                return ListTile(
+                                  onTap: () => _focusOn(m),
+                                  tileColor: m.isSos
+                                      ? theme.colorScheme.error.withValues(alpha: 0.1)
+                                      : null,
+                                  leading: Stack(
+                                    children: [
+                                      CircleAvatar(
+                                        backgroundColor:
+                                            m.isSos ? theme.colorScheme.error : null,
+                                        foregroundColor:
+                                            m.isSos ? Colors.white : null,
+                                        child: Icon(
+                                          m.isSos ? Icons.warning : Icons.person,
+                                        ),
+                                      ),
+                                      Positioned(
+                                        right: 0,
+                                        bottom: 0,
+                                        child: Container(
+                                          width: 12,
+                                          height: 12,
+                                          decoration: BoxDecoration(
+                                            color: m.isSos
+                                                ? theme.colorScheme.error
+                                                : (m.isOnline
+                                                    ? Colors.green
+                                                    : Colors.grey),
+                                            shape: BoxShape.circle,
+                                            border: Border.all(
+                                              color: theme.colorScheme.surface,
+                                              width: 2,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  title: Text(
+                                    m.name,
+                                    style: TextStyle(
+                                      fontWeight: m.isSos
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                      color: m.isSos ? theme.colorScheme.error : null,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    m.isSos
+                                        ? '🚨 BUTUH BANTUAN!'
+                                        : (m.isOnline
+                                            ? 'Terhubung'
+                                            : 'Terputus sinyal'),
+                                    style: TextStyle(
+                                      color: m.isSos ? theme.colorScheme.error : null,
+                                      fontWeight: m.isSos
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                    ),
+                                  ),
+                                  trailing: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    crossAxisAlignment: CrossAxisAlignment.end,
+                                    children: [
+                                      Text('Jarak', style: theme.textTheme.labelSmall),
+                                      Text(
+                                        formatDistance(m.distanceMeters),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                            SliverToBoxAdapter(child: SizedBox(height: bottomInset)),
+                          ],
+                        );
+                      },
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
       ),
-    ),);
+    );
   }
 }
 
