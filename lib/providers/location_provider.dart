@@ -4,6 +4,8 @@
 // (Foreground Service), RoutingService (OSRM & Nominatim), dan PermissionService.
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -23,7 +25,7 @@ import '../supabase_config.dart';
 /// - Perekaman jejak koordinat untuk disimpan ke Riwayat Perjalanan (`trip_history`)
 /// - Background tracking via Foreground Service saat aplikasi di latar belakang
 /// - Permission handling untuk lokasi
-class LocationProvider extends ChangeNotifier {
+class LocationProvider extends ChangeNotifier with WidgetsBindingObserver {
   final LocationService _locationService = LocationService();
   final RoutingService _routingService = RoutingService();
 
@@ -32,15 +34,19 @@ class LocationProvider extends ChangeNotifier {
   StreamSubscription<DestinationTarget?>? _destinationSubscription;
   StreamSubscription<Position>? _positionStreamSubscription;
   StreamSubscription<AuthState>? _authSubscription;
+  StreamSubscription? _backgroundPositionSubscription;
   Timer? _tokenRefreshTimer;
   Position? _currentPosition;
   bool _isTracking = false;
   bool _permissionsGranted = false;
   String? _error;
 
+  String? _currentGroupId;
   String? _currentUid;
+  String? _currentUserName;
   String _vehicleType = 'motor';
   String _currentMemberStatus = 'online';
+  bool _isAppInForeground = true;
   DestinationTarget? _destinationTarget;
   RouteResult? _activeRoute;
   bool _isLoadingRoute = false;
@@ -50,6 +56,14 @@ class LocationProvider extends ChangeNotifier {
 
   final List<LatLng> _recordedPath = [];
   DateTime? _tripStartedAt;
+
+  LocationProvider() {
+    try {
+      WidgetsBinding.instance.addObserver(this);
+    } catch (e) {
+      debugPrint('WidgetsBindingObserver init warning: $e');
+    }
+  }
 
   List<MemberLocation> get members => _members;
   Position? get currentPosition => _currentPosition;
@@ -81,12 +95,44 @@ class LocationProvider extends ChangeNotifier {
   }) async {
     stopListening();
     _isTracking = true;
+    _currentGroupId = groupId;
     _currentUid = uid;
+    _currentUserName = userName;
     _vehicleType = vehicleType;
     _currentMemberStatus = 'online';
     _tripStartedAt = DateTime.now();
     _recordedPath.clear();
     _error = null;
+    _isAppInForeground = true;
+
+    // Listen koordinat dari background service untuk kontinuitas jejak
+    if (!kIsWeb) {
+      _backgroundPositionSubscription?.cancel();
+      _backgroundPositionSubscription = FlutterBackgroundService()
+          .on('background_position')
+          .listen((event) {
+        if (event != null) {
+          final lat = (event['latitude'] as num?)?.toDouble();
+          final lng = (event['longitude'] as num?)?.toDouble();
+          if (lat != null && lng != null) {
+            _recordPoint(lat, lng);
+            final ts = event['timestamp'] as int? ?? DateTime.now().millisecondsSinceEpoch;
+            _currentPosition = Position(
+              latitude: lat,
+              longitude: lng,
+              timestamp: DateTime.fromMillisecondsSinceEpoch(ts),
+              accuracy: 0.0,
+              altitude: 0.0,
+              altitudeAccuracy: 0.0,
+              heading: 0.0,
+              headingAccuracy: 0.0,
+              speed: 0.0,
+              speedAccuracy: 0.0,
+            );
+          }
+        }
+      });
+    }
 
     // 1. Listen perubahan lokasi anggota dari Supabase Realtime
     _locationSubscription = _locationService
@@ -144,6 +190,7 @@ class LocationProvider extends ChangeNotifier {
           userName: userName,
           accessToken: SupabaseConfig.client.auth.currentSession?.accessToken,
           tripName: tripName,
+          isForeground: true, // Timer periodik background dimatikan saat foreground
         );
         _startTokenSync();
       } catch (e) {
@@ -583,6 +630,10 @@ class LocationProvider extends ChangeNotifier {
   /// Hanya stop stream listener (tanpa stop background service).
   void stopListening() {
     _isTracking = false;
+    _currentGroupId = null;
+    _currentUserName = null;
+    _backgroundPositionSubscription?.cancel();
+    _backgroundPositionSubscription = null;
     _positionStreamSubscription?.cancel();
     _positionStreamSubscription = null;
     _locationSubscription?.cancel();
@@ -673,7 +724,65 @@ class LocationProvider extends ChangeNotifier {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    handleAppLifecycleState(state);
+  }
+
+  @visibleForTesting
+  void handleAppLifecycleState(AppLifecycleState state) {
+    if (!_isTracking) return;
+
+    if (state == AppLifecycleState.paused || state == AppLifecycleState.hidden) {
+      if (_isAppInForeground) {
+        _isAppInForeground = false;
+        _onEnterBackground();
+      }
+    } else if (state == AppLifecycleState.resumed) {
+      if (!_isAppInForeground) {
+        _isAppInForeground = true;
+        _onEnterForeground();
+      }
+    }
+  }
+
+  void _onEnterBackground() {
+    debugPrint('LocationProvider: transitioning to BACKGROUND mode');
+    // 1. Hentikan foreground position stream untuk menghemat baterai & menghindari double GPS lock
+    _positionStreamSubscription?.cancel();
+    _positionStreamSubscription = null;
+
+    // 2. Aktifkan timer periodik di background isolate
+    if (!kIsWeb) {
+      unawaited(BackgroundLocationService.resumeTracking());
+    }
+  }
+
+  void _onEnterForeground() {
+    debugPrint('LocationProvider: transitioning to FOREGROUND mode');
+    // 1. Hentikan timer periodik di background isolate
+    if (!kIsWeb) {
+      unawaited(BackgroundLocationService.pauseTracking());
+    }
+
+    // 2. Ambil koordinat terbaru & restart foreground stream seketika
+    final gid = _currentGroupId;
+    final uid = _currentUid;
+    final name = _currentUserName;
+    if (gid != null && uid != null && name != null) {
+      unawaited(_acquireAndBroadcastPosition(groupId: gid, uid: uid, userName: name));
+      _startForegroundPositionStream(groupId: gid, uid: uid, userName: name);
+    }
+  }
+
+  @override
   void dispose() {
+    try {
+      WidgetsBinding.instance.removeObserver(this);
+    } catch (e) {
+      debugPrint('WidgetsBindingObserver dispose warning: $e');
+    }
+    _backgroundPositionSubscription?.cancel();
+    _backgroundPositionSubscription = null;
     _stopTokenSync();
     stopListening();
     super.dispose();

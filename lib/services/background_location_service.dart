@@ -5,7 +5,7 @@
 import 'dart:async';
 import 'dart:ui';
 
-import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:geolocator/geolocator.dart';
@@ -62,6 +62,33 @@ class BackgroundLocationService {
     );
   }
 
+  /// Hentikan timer periodik GPS di background isolate saat aplikasi berada di latar depan (foreground).
+  /// Notifikasi service tetap berjalan agar proses tidak di-kill oleh OS.
+  static Future<void> pauseTracking() async {
+    if (kIsWeb) return;
+    try {
+      final service = FlutterBackgroundService();
+      if (await service.isRunning()) {
+        service.invoke('pauseTracking');
+      }
+    } catch (e) {
+      debugPrint('Error pausing background tracking: $e');
+    }
+  }
+
+  /// Aktifkan kembali timer periodik GPS di background isolate saat aplikasi diminimize/ke latar belakang.
+  static Future<void> resumeTracking() async {
+    if (kIsWeb) return;
+    try {
+      final service = FlutterBackgroundService();
+      if (await service.isRunning()) {
+        service.invoke('resumeTracking');
+      }
+    } catch (e) {
+      debugPrint('Error resuming background tracking: $e');
+    }
+  }
+
   /// Mulai background tracking.
   /// Panggil saat user masuk ke grup/mulai perjalanan.
   static Future<void> startTracking({
@@ -70,6 +97,7 @@ class BackgroundLocationService {
     required String userName,
     required String? accessToken,
     String? tripName,
+    bool isForeground = true,
   }) async {
     final service = FlutterBackgroundService();
     await service.startService();
@@ -81,6 +109,7 @@ class BackgroundLocationService {
       'userName': userName,
       'tripName': tripName ?? 'Perjalanan',
       'accessToken': accessToken,
+      'isForeground': isForeground,
     });
   }
 
@@ -142,6 +171,65 @@ Future<void> _onStart(ServiceInstance service) async {
   String currentStatus = 'online';
   Timer? locationTimer;
   RealtimeChannel? trackingChannel;
+  bool isTimerPaused = true;
+
+  Future<void> sendLocationFix() async {
+    if (isTimerPaused || groupId == null || uid == null || trackingChannel == null) {
+      return;
+    }
+    try {
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          distanceFilter: 10, // Minimum 10 meter perpindahan
+        ),
+      );
+
+      // Guard race condition jika pause terjadi saat query GPS sedang berjalan
+      if (isTimerPaused) return;
+
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final payload = {
+        'uid': uid,
+        'name': userName,
+        'lat': position.latitude,
+        'lng': position.longitude,
+        'latitude': position.latitude,
+        'longitude': position.longitude,
+        'timestamp': timestamp,
+        'status': currentStatus,
+      };
+
+      // Kirim via Supabase Realtime Broadcast (Zero DB Cost)
+      await trackingChannel?.sendBroadcastMessage(
+        event: 'location_update',
+        payload: payload,
+      );
+
+      // Forward koordinat ke main isolate untuk menjaga kontinuitas _recordedPath
+      service.invoke('background_position', {
+        'latitude': position.latitude,
+        'longitude': position.longitude,
+        'timestamp': timestamp,
+      });
+    } catch (e) {
+      debugPrint('Background location error: $e');
+    }
+  }
+
+  void startPeriodicTimer() {
+    locationTimer?.cancel();
+    if (isTimerPaused) return;
+    locationTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
+      await sendLocationFix();
+    });
+    unawaited(sendLocationFix());
+  }
+
+  void stopPeriodicTimer() {
+    locationTimer?.cancel();
+    locationTimer = null;
+  }
 
   // Listen pembaruan token dari main isolate (setelah sesi di-refresh)
   service.on('updateToken').listen((event) async {
@@ -163,6 +251,20 @@ Future<void> _onStart(ServiceInstance service) async {
     }
   });
 
+  // Listen perintah pause tracking dari main isolate (saat app di foreground)
+  service.on('pauseTracking').listen((event) {
+    isTimerPaused = true;
+    stopPeriodicTimer();
+    debugPrint('BackgroundLocationService: periodic timer PAUSED (foreground mode)');
+  });
+
+  // Listen perintah resume tracking dari main isolate (saat app di background)
+  service.on('resumeTracking').listen((event) {
+    isTimerPaused = false;
+    startPeriodicTimer();
+    debugPrint('BackgroundLocationService: periodic timer RESUMED (background mode)');
+  });
+
   // Listen perintah dari main isolate
   service.on('startTracking').listen((event) async {
     groupId = event?['groupId'];
@@ -171,6 +273,8 @@ Future<void> _onStart(ServiceInstance service) async {
     accessToken = (event?['accessToken'] as String?) ?? accessToken;
     currentStatus = 'online';
     final tripName = event?['tripName'] ?? 'Perjalanan';
+    final isForeground = (event?['isForeground'] as bool?) ?? true;
+    isTimerPaused = isForeground;
 
     // Update notifikasi
     if (service is AndroidServiceInstance) {
@@ -197,42 +301,17 @@ Future<void> _onStart(ServiceInstance service) async {
       }
     }
 
-    // Mulai kirim lokasi setiap 5 detik
-    locationTimer?.cancel();
-    locationTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
-      if (groupId == null || uid == null || trackingChannel == null) return;
-
-      try {
-        final position = await Geolocator.getCurrentPosition(
-          locationSettings: const LocationSettings(
-            accuracy: LocationAccuracy.high,
-            distanceFilter: 10, // Minimum 10 meter perpindahan
-          ),
-        );
-
-        // Kirim via Supabase Realtime Broadcast (Zero DB Cost)
-        await trackingChannel?.sendBroadcastMessage(
-          event: 'location_update',
-          payload: {
-            'uid': uid,
-            'name': userName,
-            'lat': position.latitude,
-            'lng': position.longitude,
-            'latitude': position.latitude,
-            'longitude': position.longitude,
-            'timestamp': DateTime.now().millisecondsSinceEpoch,
-            'status': currentStatus,
-          },
-        );
-      } catch (e) {
-        debugPrint('Background location error: $e');
-      }
-    });
+    if (!isTimerPaused) {
+      startPeriodicTimer();
+    } else {
+      stopPeriodicTimer();
+    }
   });
 
   // Listen perintah stop
   service.on('stopTracking').listen((event) async {
-    locationTimer?.cancel();
+    isTimerPaused = true;
+    stopPeriodicTimer();
     locationTimer = null;
 
     // Broadcast status offline sebelum stop
