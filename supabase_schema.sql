@@ -116,6 +116,7 @@ ALTER TABLE public.groups ALTER COLUMN invite_code TYPE VARCHAR(12);
 
 CREATE INDEX IF NOT EXISTS idx_groups_invite_code ON public.groups (invite_code);
 CREATE INDEX IF NOT EXISTS idx_groups_status ON public.groups (status);
+CREATE INDEX IF NOT EXISTS idx_groups_member_uids ON public.groups USING gin (member_uids);
 
 -- Fungsi Validasi Batas Grup Berdasarkan Plan Subscription (Server-Side Enforcement)
 -- Free: maks 2 grup | Premium Aktif: maks 20 grup
