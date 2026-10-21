@@ -31,6 +31,8 @@ class SubscriptionPage extends StatefulWidget {
 class _SubscriptionPageState extends State<SubscriptionPage> {
   static const Color _successColor = Color(0xFF16A34A);
   static const Color _errorColor = Colors.redAccent;
+  static const double _sectionSpacing = 16.0;
+  static const double _cardRadius = 16.0;
 
   BillingCycle _selectedCycle = BillingCycle.yearly;
   String? _statusBannerMessage;
@@ -46,7 +48,10 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
         final subProvider = context.read<SubscriptionProvider>();
         subProvider.initializeForUser(uid);
         setState(() {
-          _selectedCycle = subProvider.billingCycle;
+          // Default tetap tahunan kecuali user sudah berlangganan bulanan aktif
+          _selectedCycle = subProvider.isPremium
+              ? subProvider.billingCycle
+              : BillingCycle.yearly;
         });
       }
     });
@@ -356,38 +361,34 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
       canPop: !widget.isFirstTimeFlow,
       child: Scaffold(
         backgroundColor: bgColor,
-        appBar: widget.isFirstTimeFlow
-            ? null
-            : AppBar(
-                backgroundColor: cardColor,
-                elevation: 0,
-                centerTitle: true,
-                leading: IconButton(
+        appBar: AppBar(
+          backgroundColor: cardColor,
+          elevation: 0,
+          centerTitle: true,
+          automaticallyImplyLeading: false,
+          leading: widget.isFirstTimeFlow
+              ? null
+              : IconButton(
                   icon: Icon(Icons.arrow_back_rounded, color: textPrimary),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
-                title: Text(
-                  'Subscription',
-                  style: GoogleFonts.urbanist(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w700,
-                    color: textPrimary,
-                  ),
-                ),
-              ),
+          title: Text(
+            'Subscription',
+            style: GoogleFonts.urbanist(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: textPrimary,
+            ),
+          ),
+        ),
         body: SafeArea(
           child: Stack(
             children: [
               SingleChildScrollView(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Header Brand & Tagline
-                    _buildHeader(isDark, textPrimary, textSecondary),
-                    const SizedBox(height: 20),
-
                     // Banner pesan error / sukses pembayaran
                     if (_statusBannerMessage != null) ...[
                       _buildStatusBanner(
@@ -395,7 +396,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                         _isStatusError,
                         isDark,
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: _sectionSpacing),
                     ],
 
                     // Kartu Status Langganan Saat Ini (Tampil saat dibuka dari Settings / Home)
@@ -408,27 +409,52 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                         textSecondary: textSecondary,
                         borderColor: borderColor,
                       ),
-                      const SizedBox(height: 24),
+                      const SizedBox(height: _sectionSpacing),
                     ],
 
-                    // Toggle Bulanan / Tahunan
-                    _buildBillingCycleToggle(
-                      isDark,
-                      cardColor,
-                      textPrimary,
-                      textSecondary,
+                    // Kartu Radio 1: Premium Tahunan (Default di atas, badge HEMAT 49%)
+                    _buildPlanRadioCard(
+                      title: 'Premium Tahunan',
+                      price: '${PlanLimits.yearlyPriceText} ${PlanLimits.yearlyPeriodText}',
+                      originalPrice: PlanLimits.yearlyOriginalPriceText,
+                      subtitle: PlanLimits.yearlyMonthlyEquivalentText,
+                      isSelected: _selectedCycle == BillingCycle.yearly,
+                      isDark: isDark,
+                      cardColor: cardColor,
+                      textPrimary: textPrimary,
+                      textSecondary: textSecondary,
+                      borderColor: borderColor,
+                      badgeText: 'HEMAT 49%',
+                      onTap: () => setState(() => _selectedCycle = BillingCycle.yearly),
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 12),
 
-                    // Kartu Paket Premium (Dengan highlight "PALING POPULER" & Pilihan Siklus)
-                    _buildPremiumPackageCard(
+                    // Kartu Radio 2: Premium Bulanan
+                    _buildPlanRadioCard(
+                      title: 'Premium Bulanan',
+                      price: '${PlanLimits.monthlyPriceText} ${PlanLimits.monthlyPeriodText}',
+                      originalPrice: null,
+                      subtitle: PlanLimits.monthlySubtext,
+                      isSelected: _selectedCycle == BillingCycle.monthly,
+                      isDark: isDark,
+                      cardColor: cardColor,
+                      textPrimary: textPrimary,
+                      textSecondary: textSecondary,
+                      borderColor: borderColor,
+                      onTap: () => setState(() => _selectedCycle = BillingCycle.monthly),
+                    ),
+                    const SizedBox(height: _sectionSpacing),
+
+                    // Benefit & Tombol CTA Berlangganan
+                    _buildPremiumBenefitsAndCta(
                       subProvider: subProvider,
                       isDark: isDark,
                       cardColor: cardColor,
                       textPrimary: textPrimary,
                       textSecondary: textSecondary,
+                      borderColor: borderColor,
                     ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: _sectionSpacing),
 
                     // Kartu Paket Free
                     _buildFreePackageCard(
@@ -439,7 +465,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                       textSecondary: textSecondary,
                       borderColor: borderColor,
                     ),
-                    const SizedBox(height: 24),
+                    const SizedBox(height: _sectionSpacing),
 
                     // Panel Developer Mock Toggle (SEC-02: Terproteksi hanya tampil saat mode debug / development)
                     if (kDebugMode && uid != null) ...[
@@ -452,7 +478,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                         textSecondary: textSecondary,
                         borderColor: borderColor,
                       ),
-                      const SizedBox(height: 20),
+                      const SizedBox(height: _sectionSpacing),
                     ],
 
                     // Footer: Restore Purchase, Syarat & Ketentuan, Kebijakan Privasi
@@ -508,75 +534,13 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
     );
   }
 
-  Widget _buildHeader(bool isDark, Color textPrimary, Color textSecondary) {
-    return Column(
-      children: [
-        Container(
-          width: 64,
-          height: 64,
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [AppTheme.primary, Color(0xFF4A0FBF)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
-            borderRadius: BorderRadius.circular(20),
-            boxShadow: [
-              BoxShadow(
-                color: AppTheme.primary.withValues(alpha: 0.3),
-                blurRadius: 16,
-                offset: const Offset(0, 6),
-              ),
-            ],
-          ),
-          child: const Icon(
-            Icons.workspace_premium_rounded,
-            color: Colors.white,
-            size: 36,
-          ),
-        ),
-        const SizedBox(height: 16),
-        Text(
-          'Trackie Premium',
-          style: GoogleFonts.urbanist(
-            fontSize: 15,
-            fontWeight: FontWeight.w800,
-            letterSpacing: 1.1,
-            color: AppTheme.primary,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Pilih paket yang cocok untukmu',
-          textAlign: TextAlign.center,
-          style: GoogleFonts.urbanist(
-            fontSize: 26,
-            fontWeight: FontWeight.w800,
-            color: textPrimary,
-            height: 1.2,
-          ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'Nikmati kebebasan membuat lebih banyak grup touring, navigasi rute lengkap, dan koordinasi konvoi tanpa batas.',
-          textAlign: TextAlign.center,
-          style: GoogleFonts.urbanist(
-            fontSize: 14,
-            color: textSecondary,
-            height: 1.45,
-          ),
-        ),
-      ],
-    );
-  }
-
   Widget _buildStatusBanner(String message, bool isError, bool isDark) {
     final color = isError ? _errorColor : _successColor;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: color.withValues(alpha: isDark ? 0.2 : 0.1),
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(_cardRadius),
         border: Border.all(color: color.withValues(alpha: 0.4)),
       ),
       child: Row(
@@ -627,18 +591,11 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
         : (isExpired ? _errorColor : const Color(0xFF4A0FBF));
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: cardColor,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(_cardRadius),
         border: Border.all(color: borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -649,22 +606,22 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
               Text(
                 'Status Langganan Saat Ini',
                 style: GoogleFonts.urbanist(
-                  fontSize: 14,
+                  fontSize: 13.5,
                   fontWeight: FontWeight.w600,
                   color: textSecondary,
                 ),
               ),
               Container(
                 padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    const EdgeInsets.symmetric(horizontal: 9, vertical: 3.5),
                 decoration: BoxDecoration(
-                  color: statusBadgeColor.withValues(alpha: 0.14),
+                  color: statusBadgeColor.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   statusBadgeText,
                   style: GoogleFonts.urbanist(
-                    fontSize: 11.5,
+                    fontSize: 11,
                     fontWeight: FontWeight.w800,
                     color: statusBadgeColor,
                   ),
@@ -680,13 +637,13 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                     ? Icons.workspace_premium_rounded
                     : Icons.layers_outlined,
                 color: isPremium ? AppTheme.primary : const Color(0xFF4A0FBF),
-                size: 26,
+                size: 24,
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Text(
                 'Paket ${subProvider.subscription.planDisplayName}',
                 style: GoogleFonts.urbanist(
-                  fontSize: 22,
+                  fontSize: 20,
                   fontWeight: FontWeight.w800,
                   color: textPrimary,
                 ),
@@ -694,11 +651,11 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
             ],
           ),
           if (isPremium && expiresAt != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
               'Perpanjangan berikutnya: ${DateFormat('dd MMM yyyy').format(expiresAt)}',
               style: GoogleFonts.urbanist(
-                fontSize: 13.5,
+                fontSize: 13,
                 fontWeight: FontWeight.w600,
                 color: textSecondary,
               ),
@@ -710,7 +667,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                   subProvider.autoRenew
                       ? Icons.autorenew_rounded
                       : Icons.pause_circle_outline_rounded,
-                  size: 16,
+                  size: 15,
                   color: subProvider.autoRenew ? _successColor : textSecondary,
                 ),
                 const SizedBox(width: 6),
@@ -719,7 +676,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                       ? 'Auto-renew: Aktif (${subProvider.billingCycle == BillingCycle.yearly ? 'Tahunan' : 'Bulanan'})'
                       : 'Auto-renew: Nonaktif',
                   style: GoogleFonts.urbanist(
-                    fontSize: 13,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w600,
                     color:
                         subProvider.autoRenew ? _successColor : textSecondary,
@@ -728,26 +685,28 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
               ],
             ),
           ] else if (isExpired) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
               'Masa aktif Premium kamu telah berakhir. Grup lama tetap bisa dilihat, namun kamu perlu upgrade kembali untuk menambah grup baru di atas batas Free.',
               style: GoogleFonts.urbanist(
-                fontSize: 13,
+                fontSize: 12.5,
                 color: _errorColor,
                 height: 1.4,
               ),
             ),
           ],
-          const SizedBox(height: 16),
-          const Divider(height: 1),
-          const SizedBox(height: 16),
+          Divider(
+            height: 24,
+            thickness: 1,
+            color: borderColor,
+          ),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 'Penggunaan Grup',
                 style: GoogleFonts.urbanist(
-                  fontSize: 14,
+                  fontSize: 13.5,
                   fontWeight: FontWeight.w700,
                   color: textPrimary,
                 ),
@@ -755,7 +714,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
               Text(
                 '$used / $max grup terpakai',
                 style: GoogleFonts.urbanist(
-                  fontSize: 14,
+                  fontSize: 13.5,
                   fontWeight: FontWeight.w800,
                   color: used >= max ? _errorColor : AppTheme.primary,
                 ),
@@ -767,7 +726,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
             borderRadius: BorderRadius.circular(8),
             child: LinearProgressIndicator(
               value: progress,
-              minHeight: 9,
+              minHeight: 8,
               backgroundColor:
                   isDark ? Colors.white12 : const Color(0xFFEDEDF2),
               valueColor: AlwaysStoppedAnimation<Color>(
@@ -775,14 +734,17 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
               ),
             ),
           ),
-          const SizedBox(height: 16),
-          if (isPremium)
+          if (isPremium) ...[
+            const SizedBox(height: 14),
             OutlinedButton.icon(
               onPressed: _showManageSubscriptionSheet,
-              icon: const Icon(Icons.settings_suggest_rounded, size: 18),
+              icon: const Icon(Icons.settings_suggest_rounded, size: 17),
               label: Text(
                 'Kelola Langganan (Play Store / App Store)',
-                style: GoogleFonts.urbanist(fontWeight: FontWeight.w700),
+                style: GoogleFonts.urbanist(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               style: OutlinedButton.styleFrom(
                 foregroundColor:
@@ -790,338 +752,94 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                 side: BorderSide(
                   color: isDark ? Colors.white24 : const Color(0xFF4A0FBF),
                 ),
-                minimumSize: const Size(double.infinity, 46),
+                minimumSize: const Size(double.infinity, 42),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
             ),
+          ],
         ],
       ),
     );
   }
 
-  Widget _buildBillingCycleToggle(
-    bool isDark,
-    Color cardColor,
-    Color textPrimary,
-    Color textSecondary,
-  ) {
-    return Container(
-      padding: const EdgeInsets.all(5),
-      decoration: BoxDecoration(
-        color: cardColor,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: isDark ? Colors.white12 : const Color(0xFFEDEDF2),
-        ),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: GestureDetector(
-              onTap: () => setState(() => _selectedCycle = BillingCycle.monthly),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: _selectedCycle == BillingCycle.monthly
-                      ? AppTheme.primary
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  'Bulanan',
-                  style: GoogleFonts.urbanist(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w700,
-                    color: _selectedCycle == BillingCycle.monthly
-                        ? Colors.white
-                        : textSecondary,
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            child: GestureDetector(
-              onTap: () => setState(() => _selectedCycle = BillingCycle.yearly),
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  color: _selectedCycle == BillingCycle.yearly
-                      ? AppTheme.primary
-                      : Colors.transparent,
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                alignment: Alignment.center,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Text(
-                      'Tahunan',
-                      style: GoogleFonts.urbanist(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.w700,
-                        color: _selectedCycle == BillingCycle.yearly
-                            ? Colors.white
-                            : textSecondary,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 7,
-                        vertical: 2,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _selectedCycle == BillingCycle.yearly
-                            ? Colors.white.withValues(alpha: 0.22)
-                            : AppTheme.primary.withValues(alpha: 0.14),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        'HEMAT 49%',
-                        style: GoogleFonts.urbanist(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          color: _selectedCycle == BillingCycle.yearly
-                              ? Colors.white
-                              : AppTheme.primary,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPremiumPackageCard({
-    required SubscriptionProvider subProvider,
-    required bool isDark,
-    required Color cardColor,
-    required Color textPrimary,
-    required Color textSecondary,
-  }) {
-    final isYearly = _selectedCycle == BillingCycle.yearly;
-
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        Container(
-          padding: const EdgeInsets.fromLTRB(22, 28, 22, 22),
-          decoration: BoxDecoration(
-            color: cardColor,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: AppTheme.primary,
-              width: 2.2,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: AppTheme.primary.withValues(alpha: 0.12),
-                blurRadius: 20,
-                offset: const Offset(0, 8),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // Dua kartu opsi harga bergaya referensi Gentler Streak
-              _buildSelectablePricingTile(
-                title: 'Premium Tahunan',
-                price:
-                    '${PlanLimits.yearlyPriceText} ${PlanLimits.yearlyPeriodText}',
-                originalPrice: PlanLimits.yearlyOriginalPriceText,
-                subtitle: PlanLimits.yearlyMonthlyEquivalentText,
-                isSelected: isYearly,
-                isDark: isDark,
-                textPrimary: textPrimary,
-                textSecondary: textSecondary,
-                onTap: () =>
-                    setState(() => _selectedCycle = BillingCycle.yearly),
-              ),
-              const SizedBox(height: 12),
-              _buildSelectablePricingTile(
-                title: 'Premium Bulanan',
-                price:
-                    '${PlanLimits.monthlyPriceText} ${PlanLimits.monthlyPeriodText}',
-                originalPrice: null,
-                subtitle: PlanLimits.monthlySubtext,
-                isSelected: !isYearly,
-                isDark: isDark,
-                textPrimary: textPrimary,
-                textSecondary: textSecondary,
-                onTap: () =>
-                    setState(() => _selectedCycle = BillingCycle.monthly),
-              ),
-              const SizedBox(height: 20),
-
-              Text(
-                'BENEFIT PAKET PREMIUM',
-                style: GoogleFonts.urbanist(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.0,
-                  color: AppTheme.primary,
-                ),
-              ),
-              const SizedBox(height: 12),
-              ...PlanLimits.premiumBenefits.map(
-                (benefit) => Padding(
-                  padding: const EdgeInsets.only(bottom: 10),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        margin: const EdgeInsets.only(top: 2),
-                        padding: const EdgeInsets.all(3),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primary.withValues(alpha: 0.15),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.check_rounded,
-                          color: AppTheme.primary,
-                          size: 14,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          benefit,
-                          style: GoogleFonts.urbanist(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: textPrimary,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-
-              // Tombol Berlangganan
-              ElevatedButton(
-                onPressed: subProvider.isLoading
-                    ? null
-                    : () => _handleSubscribe(simulateCancel: false),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  elevation: 0,
-                ),
-                child: Text(
-                  subProvider.isPremium
-                      ? 'Perbarui Paket Premium'
-                      : 'Berlangganan Sekarang',
-                  style: GoogleFonts.urbanist(
-                    fontSize: 16.5,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-
-        // Floating Badge "PALING POPULER • HEMAT 49%" di bagian atas kartu
-        Positioned(
-          top: -13,
-          left: 20,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppTheme.primary, Color(0xFFFF8800)],
-              ),
-              borderRadius: BorderRadius.circular(20),
-              boxShadow: [
-                BoxShadow(
-                  color: AppTheme.primary.withValues(alpha: 0.35),
-                  blurRadius: 8,
-                  offset: const Offset(0, 3),
-                ),
-              ],
-            ),
-            child: Text(
-              PlanLimits.yearlyDiscountBadge,
-              style: GoogleFonts.urbanist(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 0.5,
-                color: Colors.white,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildSelectablePricingTile({
+  Widget _buildPlanRadioCard({
     required String title,
     required String price,
     required String? originalPrice,
     required String subtitle,
     required bool isSelected,
     required bool isDark,
+    required Color cardColor,
     required Color textPrimary,
     required Color textSecondary,
+    required Color borderColor,
     required VoidCallback onTap,
+    String? badgeText,
   }) {
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(16),
+      borderRadius: BorderRadius.circular(_cardRadius),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: isSelected
-              ? AppTheme.primary.withValues(alpha: isDark ? 0.16 : 0.07)
-              : (isDark ? const Color(0xFF15181C) : const Color(0xFFF7F7FA)),
-          borderRadius: BorderRadius.circular(16),
+              ? AppTheme.primary.withValues(alpha: isDark ? 0.12 : 0.05)
+              : cardColor,
+          borderRadius: BorderRadius.circular(_cardRadius),
           border: Border.all(
-            color: isSelected
-                ? AppTheme.primary
-                : (isDark ? Colors.white12 : const Color(0xFFE5E7EB)),
-            width: isSelected ? 2 : 1,
+            color: isSelected ? AppTheme.primary : borderColor,
+            width: isSelected ? 1.5 : 1.0,
           ),
         ),
         child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    title,
-                    style: GoogleFonts.urbanist(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w700,
-                      color: isSelected ? AppTheme.primary : textPrimary,
-                    ),
+                  Row(
+                    children: [
+                      Text(
+                        title,
+                        style: GoogleFonts.urbanist(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: isSelected ? AppTheme.primary : textPrimary,
+                        ),
+                      ),
+                      if (badgeText != null) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 2.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primary.withValues(alpha: isDark ? 0.25 : 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            badgeText,
+                            style: GoogleFonts.urbanist(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.3,
+                              color: AppTheme.primary,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                  const SizedBox(height: 4),
+                  const SizedBox(height: 6),
                   Text(
                     price,
                     style: GoogleFonts.urbanist(
-                      fontSize: 19,
+                      fontSize: 18,
                       fontWeight: FontWeight.w800,
                       color: textPrimary,
                     ),
@@ -1141,7 +859,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                         ),
                         const SizedBox(width: 6),
                       ],
-                      Flexible(
+                      Expanded(
                         child: Text(
                           subtitle,
                           style: GoogleFonts.urbanist(
@@ -1149,6 +867,8 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                             fontWeight: FontWeight.w600,
                             color: textSecondary,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],
@@ -1158,15 +878,15 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
             ),
             const SizedBox(width: 12),
             Container(
-              width: 26,
-              height: 26,
+              width: 24,
+              height: 24,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 color: isSelected ? AppTheme.primary : Colors.transparent,
                 border: Border.all(
                   color: isSelected
                       ? AppTheme.primary
-                      : (isDark ? Colors.white30 : const Color(0xFFC4C4D4)),
+                      : (isDark ? Colors.white24 : const Color(0xFFC4C4D4)),
                   width: 2,
                 ),
               ),
@@ -1174,12 +894,117 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                   ? const Icon(
                       Icons.check_rounded,
                       color: Colors.white,
-                      size: 17,
+                      size: 15,
                     )
                   : null,
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildPremiumBenefitsAndCta({
+    required SubscriptionProvider subProvider,
+    required bool isDark,
+    required Color cardColor,
+    required Color textPrimary,
+    required Color textSecondary,
+    required Color borderColor,
+  }) {
+    final ctaLabel = subProvider.isPremium
+        ? 'Perbarui Paket Premium'
+        : (_selectedCycle == BillingCycle.yearly
+            ? 'Berlangganan Tahunan'
+            : 'Berlangganan Bulanan');
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: cardColor,
+        borderRadius: BorderRadius.circular(_cardRadius),
+        border: Border.all(color: borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.stars_rounded,
+                color: AppTheme.primary,
+                size: 20,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Keuntungan Premium',
+                style: GoogleFonts.urbanist(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: textPrimary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          ...PlanLimits.premiumBenefits.map(
+            (benefit) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    margin: const EdgeInsets.only(top: 2),
+                    padding: const EdgeInsets.all(2),
+                    decoration: BoxDecoration(
+                      color: AppTheme.primary.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.check_rounded,
+                      color: AppTheme.primary,
+                      size: 12,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      benefit,
+                      style: GoogleFonts.urbanist(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: textPrimary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          ElevatedButton(
+            onPressed: subProvider.isLoading
+                ? null
+                : () => _handleSubscribe(simulateCancel: false),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+              elevation: 0,
+            ),
+            child: Text(
+              ctaLabel,
+              style: GoogleFonts.urbanist(
+                fontSize: 15.5,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -1193,10 +1018,10 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
     required Color borderColor,
   }) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: cardColor,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius: BorderRadius.circular(_cardRadius),
         border: Border.all(color: borderColor),
       ),
       child: Column(
@@ -1211,16 +1036,16 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                   Text(
                     'Paket Free',
                     style: GoogleFonts.urbanist(
-                      fontSize: 18,
+                      fontSize: 16,
                       fontWeight: FontWeight.w800,
                       color: textPrimary,
                     ),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Maksimal ${PlanLimits.freeMaxGroups} grup perjalanan',
+                    'Akses dasar untuk touring santai',
                     style: GoogleFonts.urbanist(
-                      fontSize: 13.5,
+                      fontSize: 13,
                       fontWeight: FontWeight.w600,
                       color: textSecondary,
                     ),
@@ -1230,7 +1055,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
               Text(
                 'Gratis',
                 style: GoogleFonts.urbanist(
-                  fontSize: 20,
+                  fontSize: 18,
                   fontWeight: FontWeight.w800,
                   color: isDark
                       ? const Color(0xFFB58CFF)
@@ -1239,7 +1064,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 12),
           ...PlanLimits.freeBenefits.map(
             (item) => Padding(
               padding: const EdgeInsets.only(bottom: 8),
@@ -1247,7 +1072,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                 children: [
                   Icon(
                     Icons.check_circle_outline_rounded,
-                    size: 17,
+                    size: 16,
                     color: textSecondary,
                   ),
                   const SizedBox(width: 8),
@@ -1255,7 +1080,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
                     child: Text(
                       item,
                       style: GoogleFonts.urbanist(
-                        fontSize: 13.5,
+                        fontSize: 13,
                         color: textSecondary,
                       ),
                     ),
@@ -1264,13 +1089,13 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
               ),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 10),
           OutlinedButton(
             onPressed: subProvider.isLoading ? null : _handleContinueAsFree,
             style: OutlinedButton.styleFrom(
               foregroundColor: textPrimary,
-              side: BorderSide(color: borderColor, width: 1.5),
-              padding: const EdgeInsets.symmetric(vertical: 14),
+              side: BorderSide(color: borderColor, width: 1.2),
+              padding: const EdgeInsets.symmetric(vertical: 13),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
               ),
@@ -1278,7 +1103,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
             child: Text(
               'Continue as Free',
               style: GoogleFonts.urbanist(
-                fontSize: 15.5,
+                fontSize: 14.5,
                 fontWeight: FontWeight.w700,
                 color: textPrimary,
               ),
@@ -1304,7 +1129,7 @@ class _SubscriptionPageState extends State<SubscriptionPage> {
         color: isDark
             ? const Color(0xFF4A0FBF).withValues(alpha: 0.15)
             : const Color(0xFF4A0FBF).withValues(alpha: 0.06),
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(_cardRadius),
         border: Border.all(
           color: const Color(0xFF4A0FBF).withValues(alpha: 0.25),
         ),
