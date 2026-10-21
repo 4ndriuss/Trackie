@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:intl/intl.dart';
@@ -70,12 +71,69 @@ class HistoryTab extends StatefulWidget {
 
 class _HistoryTabState extends State<HistoryTab> {
   final TripService _tripService = TripService();
+  StreamSubscription<List<TripHistoryModel>>? _tripSubscription;
+  List<TripHistoryModel>? _tripHistory;
+  bool _isLoading = true;
+  String? _subscribedUid;
+
+  @override
+  void initState() {
+    super.initState();
+    final uid = context.read<AuthProvider>().user?.uid;
+    _subscribeToTripHistory(uid);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final currentUid = context.watch<AuthProvider>().user?.uid;
+    if (currentUid != _subscribedUid) {
+      _subscribeToTripHistory(currentUid);
+    }
+  }
+
+  void _subscribeToTripHistory(String? uid) {
+    _subscribedUid = uid;
+    _tripSubscription?.cancel();
+    _tripSubscription = null;
+
+    if (uid == null) {
+      setState(() {
+        _tripHistory = null;
+        _isLoading = false;
+      });
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    _tripSubscription = _tripService.streamTripHistory(uid).listen(
+      (data) {
+        if (mounted) {
+          setState(() {
+            _tripHistory = data;
+            _isLoading = false;
+          });
+        }
+      },
+      onError: (err) {
+        debugPrint('Error streaming trip history: $err');
+        if (mounted) {
+          setState(() => _isLoading = false);
+        }
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _tripSubscription?.cancel();
+    _tripSubscription = null;
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     final numberFormat = NumberFormat.decimalPattern('id');
-    final authProvider = context.watch<AuthProvider>();
-    final uid = authProvider.user?.uid;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF7F7FA),
@@ -100,7 +158,7 @@ class _HistoryTabState extends State<HistoryTab> {
         ),
       ),
       body: SafeArea(
-        child: uid == null
+        child: _subscribedUid == null
             ? Center(
                 child: Text(
                   'Silakan login untuk melihat riwayat perjalanan',
@@ -110,21 +168,20 @@ class _HistoryTabState extends State<HistoryTab> {
                   ),
                 ),
               )
-            : StreamBuilder<List<TripHistoryModel>>(
-                stream: _tripService.streamTripHistory(uid),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting &&
-                      !snapshot.hasData) {
-                    return const Center(
-                      child: CircularProgressIndicator(color: AppTheme.primary),
-                    );
-                  }
+            : _isLoading
+                ? const Center(
+                    child: CircularProgressIndicator(color: AppTheme.primary),
+                  )
+                : _buildTripContent(numberFormat),
+      ),
+    );
+  }
 
-                  final models = snapshot.data ?? const <TripHistoryModel>[];
-                  final historyList =
-                      models.map(TripHistory.fromModel).toList();
+  Widget _buildTripContent(NumberFormat numberFormat) {
+    final models = _tripHistory ?? const <TripHistoryModel>[];
+    final historyList = models.map(TripHistory.fromModel).toList();
 
-                  if (historyList.isEmpty) {
+    if (historyList.isEmpty) {
                     return Center(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -354,10 +411,6 @@ class _HistoryTabState extends State<HistoryTab> {
                       );
                     },
                   );
-                },
-              ),
-      ),
-    );
   }
 
   Widget _buildStatMetric(IconData icon, String value) {
