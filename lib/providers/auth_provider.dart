@@ -169,18 +169,21 @@ class AuthProvider extends ChangeNotifier {
 
   /// Mengunggah dan memperbarui foto profil pengguna.
   Future<bool> updateProfilePicture(Uint8List fileBytes, String ext) async {
-    if (_user == null) return false;
+    final currentUser = _user;
+    if (currentUser == null) return false;
+    final uid = currentUser.uid;
+
     try {
       _isLoading = true;
       _error = null;
       notifyListeners();
 
-      final downloadUrl = await _authService.uploadProfilePicture(_user!.uid, fileBytes, ext);
+      final downloadUrl = await _authService.uploadProfilePicture(uid, fileBytes, ext);
       if (downloadUrl != null) {
         if (_userProfile != null) {
           _userProfile = _userProfile!.copyWith(photoUrl: downloadUrl);
         } else {
-          await _loadUserProfile(_user!.uid);
+          await _loadUserProfile(uid);
         }
         return true;
       }
@@ -267,14 +270,17 @@ class AuthProvider extends ChangeNotifier {
 
   /// Memperbarui profil user.
   Future<bool> updateProfile({String? name, String? vehicle}) async {
-    if (_user == null) return false;
+    final currentUser = _user;
+    if (currentUser == null) return false;
+    final uid = currentUser.uid;
+
     try {
       _isLoading = true;
       _error = null;
       notifyListeners();
 
-      await _authService.updateUserProfile(_user!.uid, name: name, vehicle: vehicle);
-      await _loadUserProfile(_user!.uid);
+      await _authService.updateUserProfile(uid, name: name, vehicle: vehicle);
+      await _loadUserProfile(uid);
 
       _isLoading = false;
       notifyListeners();

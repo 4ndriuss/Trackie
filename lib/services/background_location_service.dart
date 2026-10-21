@@ -98,6 +98,7 @@ class BackgroundLocationService {
     required String? accessToken,
     String? tripName,
     bool isForeground = true,
+    bool isGhostMode = false,
   }) async {
     final service = FlutterBackgroundService();
     await service.startService();
@@ -110,6 +111,7 @@ class BackgroundLocationService {
       'tripName': tripName ?? 'Perjalanan',
       'accessToken': accessToken,
       'isForeground': isForeground,
+      'isGhostMode': isGhostMode,
     });
   }
 
@@ -126,6 +128,16 @@ class BackgroundLocationService {
   static void setStatus(String status) {
     final service = FlutterBackgroundService();
     service.invoke('setStatus', {'status': status});
+  }
+
+  /// Update preferensi Ghost Mode di background isolate.
+  static void setGhostMode(bool isGhostMode) {
+    try {
+      final service = FlutterBackgroundService();
+      service.invoke('setGhostMode', {'isGhostMode': isGhostMode});
+    } catch (e) {
+      debugPrint('Error updating ghost mode in background: $e');
+    }
   }
 
   /// Hentikan background tracking.
@@ -172,9 +184,10 @@ Future<void> _onStart(ServiceInstance service) async {
   Timer? locationTimer;
   RealtimeChannel? trackingChannel;
   bool isTimerPaused = true;
+  bool isGhostMode = false;
 
   Future<void> sendLocationFix() async {
-    if (isTimerPaused || groupId == null || uid == null || trackingChannel == null) {
+    if (isTimerPaused || groupId == null || uid == null) {
       return;
     }
     try {
@@ -182,6 +195,7 @@ Future<void> _onStart(ServiceInstance service) async {
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
           distanceFilter: 10, // Minimum 10 meter perpindahan
+          timeLimit: Duration(seconds: 4), // Mencegah penumpukan kueri paralel (BUG-07)
         ),
       );
 
@@ -200,11 +214,13 @@ Future<void> _onStart(ServiceInstance service) async {
         'status': currentStatus,
       };
 
-      // Kirim via Supabase Realtime Broadcast (Zero DB Cost)
-      await trackingChannel?.sendBroadcastMessage(
-        event: 'location_update',
-        payload: payload,
-      );
+      // Kirim via Supabase Realtime Broadcast jika bukan mode Ghost
+      if (!isGhostMode && trackingChannel != null) {
+        await trackingChannel?.sendBroadcastMessage(
+          event: 'location_update',
+          payload: payload,
+        );
+      }
 
       // Forward koordinat ke main isolate untuk menjaga kontinuitas _recordedPath
       service.invoke('background_position', {
@@ -251,6 +267,12 @@ Future<void> _onStart(ServiceInstance service) async {
     }
   });
 
+  // Listen perubahan Ghost Mode
+  service.on('setGhostMode').listen((event) {
+    isGhostMode = (event?['isGhostMode'] as bool?) ?? false;
+    debugPrint('BackgroundLocationService: Ghost Mode updated to $isGhostMode');
+  });
+
   // Listen perintah pause tracking dari main isolate (saat app di foreground)
   service.on('pauseTracking').listen((event) {
     isTimerPaused = true;
@@ -274,6 +296,7 @@ Future<void> _onStart(ServiceInstance service) async {
     currentStatus = 'online';
     final tripName = event?['tripName'] ?? 'Perjalanan';
     final isForeground = (event?['isForeground'] as bool?) ?? true;
+    isGhostMode = (event?['isGhostMode'] as bool?) ?? false;
     isTimerPaused = isForeground;
 
     // Update notifikasi

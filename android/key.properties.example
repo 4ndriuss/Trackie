@@ -1,0 +1,8 @@
+# Template Konfigurasi Penandatanganan Rilis Android (SEC-03)
+# Salin file ini menjadi 'android/key.properties' dan isi dengan kredensial keystore release asli Anda.
+# PENTING: Jangan pernah commit file 'key.properties' atau file '*.jks' ke Git repository!
+
+storePassword=YOUR_KEYSTORE_PASSWORD
+keyPassword=YOUR_KEY_PASSWORD
+keyAlias=YOUR_KEY_ALIAS
+storeFile=/path/to/your/upload-keystore.jks

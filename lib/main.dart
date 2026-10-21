@@ -14,7 +14,9 @@ import 'providers/group_provider.dart';
 import 'providers/location_provider.dart';
 import 'providers/locale_provider.dart';
 import 'providers/subscription_provider.dart';
+import 'providers/theme_provider.dart';
 import 'services/background_location_service.dart';
+import 'services/secure_local_storage.dart';
 import 'supabase_config.dart';
 
 import 'package:flutter/foundation.dart';
@@ -27,6 +29,9 @@ void main() async {
   await Supabase.initialize(
     url: SupabaseConfig.url,
     publishableKey: SupabaseConfig.anonKey,
+    authOptions: const FlutterAuthClientOptions(
+      localStorage: SecureLocalStorage(),
+    ),
   );
   
   if (!kIsWeb) {
@@ -47,21 +52,25 @@ class TrackieApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => LocaleProvider()),
         ChangeNotifierProvider(create: (_) => AuthProvider()..init()),
         ChangeNotifierProvider(create: (_) => GroupProvider()),
         ChangeNotifierProvider(create: (_) => LocationProvider()),
         ChangeNotifierProvider(create: (_) => SubscriptionProvider()),
       ],
-      child: ValueListenableBuilder<ThemeMode>(
-        valueListenable: themeNotifier,
-        builder: (context, ThemeMode currentMode, child) {
+      child: Consumer<ThemeProvider>(
+        builder: (context, themeProvider, child) {
+          // ARCH-12 & BUG-18: Sinkronkan themeNotifier untuk kompatibilitas UI
+          if (themeNotifier.value != themeProvider.themeMode) {
+            themeNotifier.value = themeProvider.themeMode;
+          }
           final localeProvider = Provider.of<LocaleProvider>(context);
           return MaterialApp(
             title: 'Trackie',
             theme: AppTheme.lightTheme,
             darkTheme: AppTheme.darkTheme,
-            themeMode: currentMode,
+            themeMode: themeProvider.themeMode,
             locale: localeProvider.locale,
             localizationsDelegates: const [
               AppLocalizations.delegate,

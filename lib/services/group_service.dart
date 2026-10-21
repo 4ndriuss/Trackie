@@ -8,7 +8,11 @@ import '../supabase_config.dart';
 
 /// [GroupService] menyediakan operasi CRUD untuk tabel 'groups' di Supabase.
 class GroupService {
-  SupabaseClient get _supabase => SupabaseConfig.client;
+  final SupabaseClient? _injectedClient;
+
+  GroupService({SupabaseClient? supabaseClient}) : _injectedClient = supabaseClient;
+
+  SupabaseClient get _supabase => _injectedClient ?? SupabaseConfig.client;
 
   /// Membuat kode undangan unik secara kriptografis dengan format TRG-XXXXXX.
   String _generateInviteCode() {
@@ -20,13 +24,14 @@ class GroupService {
     return 'TRG-$code';
   }
 
-  /// Menghitung jumlah grup yang telah dibuat atau diikuti oleh user.
+  /// Menghitung jumlah grup aktif yang telah dibuat atau diikuti oleh user.
   Future<int> getUserGroupCount(String uid) async {
     try {
       final rows = await _supabase
           .from('groups')
           .select('id')
-          .contains('member_uids', [uid]);
+          .contains('member_uids', [uid])
+          .eq('status', 'active');
       return (rows as List).length;
     } catch (e) {
       debugPrint('Error getting user group count: $e');

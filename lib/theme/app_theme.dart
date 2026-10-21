@@ -18,10 +18,12 @@ class AppTheme {
     return ThemeData(
       scaffoldBackgroundColor: neutral,
       primaryColor: primary,
+      cardColor: neutral,
       colorScheme: const ColorScheme.light(
         primary: primary,
         secondary: secondary,
         surface: neutral,
+        onSurface: textDark,
         error: Colors.redAccent,
       ),
       // Pengaturan tipografi menggunakan font dari Google Fonts
@@ -117,11 +119,13 @@ class AppTheme {
 
     return ThemeData(
       scaffoldBackgroundColor: darkBg,
-      primaryColor: darkText,
+      primaryColor: primary,
+      cardColor: darkSurface,
       colorScheme: const ColorScheme.dark(
-        primary: darkText,
+        primary: primary,
         secondary: secondaryDark,
         surface: darkSurface,
+        onSurface: darkText,
         error: Colors.redAccent,
       ),
       textTheme: TextTheme(

@@ -63,7 +63,7 @@ class _HomeTabState extends State<HomeTab> {
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).cardColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
@@ -100,7 +100,7 @@ class _HomeTabState extends State<HomeTab> {
                 style: GoogleFonts.urbanist(
                   fontSize: 21,
                   fontWeight: FontWeight.w800,
-                  color: const Color(0xFF1A1A2E),
+                  color: Theme.of(context).colorScheme.onSurface,
                 ),
               ),
               const SizedBox(height: 10),
@@ -136,7 +136,7 @@ class _HomeTabState extends State<HomeTab> {
                   style: GoogleFonts.urbanist(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
-                    color: Colors.white,
+                    color: Theme.of(context).cardColor,
                   ),
                 ),
                 style: ElevatedButton.styleFrom(
@@ -185,7 +185,7 @@ class _HomeTabState extends State<HomeTab> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).cardColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -231,7 +231,7 @@ class _HomeTabState extends State<HomeTab> {
                       style: GoogleFonts.urbanist(
                         fontSize: 24,
                         fontWeight: FontWeight.w700,
-                        color: const Color(0xFF1A1A2E),
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                     ),
                     const SizedBox(height: 24),
@@ -254,7 +254,7 @@ class _HomeTabState extends State<HomeTab> {
                       controller: destinationController,
                       onChanged: onDestinationChanged,
                       style: GoogleFonts.urbanist(
-                        color: const Color(0xFF1A1A2E),
+                        color: Theme.of(context).colorScheme.onSurface,
                         fontSize: 16,
                       ),
                       decoration: InputDecoration(
@@ -285,7 +285,7 @@ class _HomeTabState extends State<HomeTab> {
                                   )
                                 : null),
                         filled: true,
-                        fillColor: const Color(0xFFF7F7FA),
+                        fillColor: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF7F7FA),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide.none,
@@ -301,16 +301,16 @@ class _HomeTabState extends State<HomeTab> {
                       Container(
                         constraints: const BoxConstraints(maxHeight: 180),
                         decoration: BoxDecoration(
-                          color: const Color(0xFFF7F7FA),
+                          color: Theme.of(context).cardColor,
                           borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: const Color(0xFFEDEDF2)),
+                          border: Border.all(color: Theme.of(context).dividerColor),
                         ),
                         child: ListView.separated(
                           shrinkWrap: true,
                           padding: EdgeInsets.zero,
                           itemCount: suggestions.length,
                           separatorBuilder: (_, _) =>
-                              const Divider(height: 1, color: Color(0xFFEDEDF2)),
+                              Divider(height: 1, color: Theme.of(context).dividerColor),
                           itemBuilder: (ctx, i) {
                             final item = suggestions[i];
                             return ListTile(
@@ -325,7 +325,7 @@ class _HomeTabState extends State<HomeTab> {
                                 style: GoogleFonts.urbanist(
                                   fontWeight: FontWeight.w700,
                                   fontSize: 14,
-                                  color: const Color(0xFF1A1A2E),
+                                  color: Theme.of(context).colorScheme.onSurface,
                                 ),
                               ),
                               subtitle: Text(
@@ -361,14 +361,14 @@ class _HomeTabState extends State<HomeTab> {
                     ),
                     const SizedBox(height: 8),
                     DropdownButtonFormField<String>(
-                      dropdownColor: Colors.white,
+                      dropdownColor: Theme.of(context).cardColor,
                       style: GoogleFonts.urbanist(
-                        color: const Color(0xFF1A1A2E),
+                        color: Theme.of(context).colorScheme.onSurface,
                         fontSize: 16,
                       ),
                       decoration: InputDecoration(
                         filled: true,
-                        fillColor: const Color(0xFFF7F7FA),
+                        fillColor: Theme.of(context).brightness == Brightness.dark ? Colors.white10 : const Color(0xFFF7F7FA),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
                           borderSide: BorderSide.none,
@@ -519,7 +519,7 @@ class _HomeTabState extends State<HomeTab> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).cardColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -542,7 +542,7 @@ class _HomeTabState extends State<HomeTab> {
                     style: GoogleFonts.urbanist(
                       fontSize: 24,
                       fontWeight: FontWeight.w700,
-                      color: const Color(0xFF1A1A2E),
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                   const SizedBox(height: 24),
@@ -656,6 +656,7 @@ class _HomeTabState extends State<HomeTab> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     final authProvider = context.watch<AuthProvider>();
     final groupProvider = context.watch<GroupProvider>();
     final subProvider = context.watch<SubscriptionProvider>();
@@ -691,7 +692,7 @@ class _HomeTabState extends State<HomeTab> {
     ];
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F7FA),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
@@ -716,7 +717,7 @@ class _HomeTabState extends State<HomeTab> {
                                 style: GoogleFonts.urbanist(
                                   fontSize: 28,
                                   fontWeight: FontWeight.w700,
-                                  color: const Color(0xFF1A1A2E),
+                                  color: Theme.of(context).colorScheme.onSurface,
                                 ),
                                 overflow: TextOverflow.ellipsis,
                               ),
@@ -829,7 +830,7 @@ class _HomeTabState extends State<HomeTab> {
                             color: Colors.redAccent,
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: const Color(0xFFF7F7FA),
+                              color: theme.scaffoldBackgroundColor,
                               width: 2,
                             ),
                           ),
@@ -964,7 +965,7 @@ class _HomeTabState extends State<HomeTab> {
                     style: GoogleFonts.urbanist(
                       fontSize: 18,
                       fontWeight: FontWeight.w700,
-                      color: const Color(0xFF1A1A2E),
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                   TextButton(
@@ -987,10 +988,10 @@ class _HomeTabState extends State<HomeTab> {
                 return Container(
                   margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: Theme.of(context).cardColor,
                     borderRadius: BorderRadius.circular(20),
                     border:
-                        Border.all(color: const Color(0xFFEDEDF2), width: 1),
+                        Border.all(color: Theme.of(context).dividerColor, width: 1),
                   ),
                   child: Material(
                     color: Colors.transparent,
@@ -1007,7 +1008,7 @@ class _HomeTabState extends State<HomeTab> {
                               width: 56,
                               height: 64,
                               decoration: BoxDecoration(
-                                color: const Color(0xFFF1F1F5),
+                                color: Theme.of(context).brightness == Brightness.dark ? Colors.white12 : const Color(0xFFF1F1F5),
                                 borderRadius: BorderRadius.circular(16),
                               ),
                               child: Column(
@@ -1016,7 +1017,7 @@ class _HomeTabState extends State<HomeTab> {
                                   Text(
                                     trip['date'],
                                     style: GoogleFonts.urbanist(
-                                      color: const Color(0xFF1A1A2E),
+                                      color: Theme.of(context).colorScheme.onSurface,
                                       fontSize: 18,
                                       fontWeight: FontWeight.w700,
                                       height: 1.1,
@@ -1050,7 +1051,7 @@ class _HomeTabState extends State<HomeTab> {
                                           style: GoogleFonts.urbanist(
                                             fontSize: 16,
                                             fontWeight: FontWeight.w700,
-                                            color: const Color(0xFF1A1A2E),
+                                            color: Theme.of(context).colorScheme.onSurface,
                                           ),
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
@@ -1061,7 +1062,7 @@ class _HomeTabState extends State<HomeTab> {
                                         style: GoogleFonts.urbanist(
                                           fontSize: 14,
                                           fontWeight: FontWeight.w700,
-                                          color: const Color(0xFF1A1A2E),
+                                          color: Theme.of(context).colorScheme.onSurface,
                                         ),
                                       ),
                                     ],
@@ -1124,7 +1125,7 @@ class _HomeTabState extends State<HomeTab> {
                                           vertical: 4,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: const Color(0xFFF1F1F5),
+                                          color: Theme.of(context).brightness == Brightness.dark ? Colors.white12 : const Color(0xFFF1F1F5),
                                           borderRadius:
                                               BorderRadius.circular(8),
                                         ),
@@ -1177,10 +1178,10 @@ class _HomeTabState extends State<HomeTab> {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: isPrimary ? color : Colors.white,
+        color: isPrimary ? color : Theme.of(context).cardColor,
         borderRadius: BorderRadius.circular(24),
         border: Border.all(
-          color: isPrimary ? color : const Color(0xFFEDEDF2),
+          color: isPrimary ? color : Theme.of(context).dividerColor,
           width: 1,
         ),
         boxShadow: isPrimary
@@ -1223,7 +1224,7 @@ class _HomeTabState extends State<HomeTab> {
                   style: GoogleFonts.urbanist(
                     fontSize: 16,
                     fontWeight: FontWeight.w700,
-                    color: isPrimary ? Colors.white : const Color(0xFF1A1A2E),
+                    color: isPrimary ? Colors.white : Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
               ],

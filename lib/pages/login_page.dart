@@ -3,7 +3,6 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../providers/auth_provider.dart';
-import '../providers/subscription_provider.dart';
 import '../widgets/custom_textfield.dart';
 import '../widgets/primary_button.dart';
 import '../widgets/social_button.dart';
@@ -19,6 +18,7 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  static const bool _enableFacebookLogin = false; // Disembunyikan sementara hingga Meta App ID dikonfigurasi resmi
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -29,19 +29,6 @@ class _LoginPageState extends State<LoginPage> {
     _emailController.dispose();
     _passwordController.dispose();
     super.dispose();
-  }
-
-  Future<String> _resolvePostLoginRoute() async {
-    final authProvider = context.read<AuthProvider>();
-    final subProvider = context.read<SubscriptionProvider>();
-    final uid = authProvider.user?.uid;
-    if (uid != null) {
-      await subProvider.initializeForUser(uid, forceRefresh: true);
-      if (!subProvider.hasSeenSubscriptionPage) {
-        return '/subscription-onboarding';
-      }
-    }
-    return '/home';
   }
 
   Future<void> _handleLogin() async {
@@ -57,8 +44,6 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
 
       if (success) {
-        final targetRoute = await _resolvePostLoginRoute();
-        if (!mounted) return;
         setState(() => _isLoading = false);
 
         await showSuccessDialog(
@@ -68,7 +53,7 @@ class _LoginPageState extends State<LoginPage> {
           buttonText: 'Continue',
           onPressed: () {
             Navigator.of(context).pushNamedAndRemoveUntil(
-              targetRoute,
+              '/',
               (route) => false,
             );
           },
@@ -95,8 +80,6 @@ class _LoginPageState extends State<LoginPage> {
     if (!mounted) return;
 
     if (success) {
-      final targetRoute = await _resolvePostLoginRoute();
-      if (!mounted) return;
       setState(() => _isLoading = false);
 
       await showSuccessDialog(
@@ -106,7 +89,7 @@ class _LoginPageState extends State<LoginPage> {
         buttonText: 'Continue',
         onPressed: () {
           Navigator.of(context).pushNamedAndRemoveUntil(
-            targetRoute,
+            '/',
             (route) => false,
           );
         },
@@ -134,8 +117,6 @@ class _LoginPageState extends State<LoginPage> {
     if (!mounted) return;
 
     if (success) {
-      final targetRoute = await _resolvePostLoginRoute();
-      if (!mounted) return;
       setState(() => _isLoading = false);
 
       await showSuccessDialog(
@@ -145,7 +126,7 @@ class _LoginPageState extends State<LoginPage> {
         buttonText: 'Continue',
         onPressed: () {
           Navigator.of(context).pushNamedAndRemoveUntil(
-            targetRoute,
+            '/',
             (route) => false,
           );
         },
@@ -230,12 +211,12 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF1A1A1A)),
+          icon: Icon(Icons.arrow_back, color: Theme.of(context).colorScheme.onSurface),
           onPressed: () {
             Navigator.pushReplacement(
               context,
@@ -266,7 +247,7 @@ class _LoginPageState extends State<LoginPage> {
                             style: GoogleFonts.urbanist(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
-                              color: const Color(0xFF1A1A1A),
+                              color: Theme.of(context).colorScheme.onSurface,
                             ),
                           ),
                         ],
@@ -277,7 +258,7 @@ class _LoginPageState extends State<LoginPage> {
                         style: GoogleFonts.urbanist(
                           fontSize: 32,
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF1A1A1A),
+                          color: Theme.of(context).colorScheme.onSurface,
                           height: 1.2,
                         ),
                       ),
@@ -341,7 +322,7 @@ class _LoginPageState extends State<LoginPage> {
                       const SizedBox(height: 32),
                       Row(
                         children: [
-                          const Expanded(child: Divider(color: Color(0xFFE5E7EB))),
+                          Expanded(child: Divider(color: Theme.of(context).dividerColor)),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             child: Text(
@@ -352,7 +333,7 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                             ),
                           ),
-                          const Expanded(child: Divider(color: Color(0xFFE5E7EB))),
+                          Expanded(child: Divider(color: Theme.of(context).dividerColor)),
                         ],
                       ),
                       const SizedBox(height: 32),
@@ -361,12 +342,14 @@ class _LoginPageState extends State<LoginPage> {
                         icon: const Icon(Icons.g_mobiledata, color: Colors.blue, size: 28),
                         onPressed: _handleGoogleLogin,
                       ),
-                      const SizedBox(height: 16),
-                      SocialButton(
-                        text: 'Continue with Facebook',
-                        icon: const Icon(Icons.facebook, color: Colors.blueAccent, size: 24),
-                        onPressed: _handleFacebookLogin,
-                      ),
+                      if (_enableFacebookLogin) ...[
+                        const SizedBox(height: 16),
+                        SocialButton(
+                          text: 'Continue with Facebook',
+                          icon: const Icon(Icons.facebook, color: Colors.blueAccent, size: 24),
+                          onPressed: _handleFacebookLogin,
+                        ),
+                      ],
                       const SizedBox(height: 24),
                     ],
                   ),

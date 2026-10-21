@@ -15,14 +15,18 @@ class SocialButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
     return SizedBox(
       width: double.infinity,
       height: 52,
       child: OutlinedButton(
         onPressed: onPressed,
         style: OutlinedButton.styleFrom(
-          backgroundColor: Colors.white,
-          side: const BorderSide(color: Color(0xFFE5E7EB)),
+          backgroundColor: isDark ? theme.colorScheme.surface : Colors.white,
+          side: BorderSide(
+            color: isDark ? Colors.white24 : const Color(0xFFE5E7EB),
+          ),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
@@ -37,7 +41,7 @@ class SocialButton extends StatelessWidget {
               style: GoogleFonts.urbanist(
                 fontSize: 16,
                 fontWeight: FontWeight.bold,
-                color: const Color(0xFF1A1A1A),
+                color: theme.colorScheme.onSurface,
               ),
             ),
           ],

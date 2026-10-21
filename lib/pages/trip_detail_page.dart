@@ -348,6 +348,11 @@ class _TripDetailPageState extends State<TripDetailPage> {
         ? points.first
         : const LatLng(-6.200000, 106.816666);
 
+    final hasDistinctPoints = points.length >= 2 &&
+        points.any((p) =>
+            p.latitude != points.first.latitude ||
+            p.longitude != points.first.longitude);
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Detail Perjalanan'),
@@ -371,7 +376,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
                   options: MapOptions(
                     initialCenter: initialPosition,
                     initialZoom: 13.0,
-                    initialCameraFit: points.length >= 2
+                    initialCameraFit: hasDistinctPoints
                         ? CameraFit.bounds(
                             bounds: LatLngBounds.fromPoints(points),
                             padding: const EdgeInsets.all(50.0),
@@ -381,7 +386,7 @@ class _TripDetailPageState extends State<TripDetailPage> {
                   children: [
                     TileLayer(
                       urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.example.trackie',
+                      userAgentPackageName: 'com.trackie.app',
                     ),
                     if (points.isNotEmpty)
                       PolylineLayer(

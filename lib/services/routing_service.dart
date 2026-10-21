@@ -140,7 +140,7 @@ class RouteResult {
 
 class RoutingService {
   static Map<String, String> get _headers => {
-        if (!kIsWeb) 'User-Agent': 'TrackieApp/1.0 (com.example.trackie)',
+        if (!kIsWeb) 'User-Agent': 'TrackieApp/1.0 (com.trackie.app)',
         'Accept': 'application/json',
       };
 

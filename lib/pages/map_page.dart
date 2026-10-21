@@ -11,57 +11,16 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
+import '../services/permission_service.dart';
 import '../theme/app_theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/group_provider.dart';
 import '../providers/location_provider.dart';
 import '../services/haversine_utils.dart';
 import '../services/routing_service.dart';
-import '../services/trip_service.dart';
-
-/// Status anggota grup, menentukan warna indikator dan opasitas marker.
-enum MemberStatus { online, offline, sos }
-
-/// [GroupMember] menyimpan data untuk setiap anggota yang tergabung dalam perjalanan.
-class GroupMember {
-  const GroupMember({
-    required this.id,
-    required this.name,
-    required this.status,
-    required this.position,
-    required this.distanceMeters,
-  });
-
-  final String id;
-  final String name;
-  final MemberStatus status;
-  final LatLng position; // Titik koordinat di peta
-  final double distanceMeters; // Jarak anggota dengan pengguna saat ini
-
-  // Mengecek status anggota
-  bool get isOnline =>
-      status == MemberStatus.online || status == MemberStatus.sos;
-  bool get isSos => status == MemberStatus.sos;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is GroupMember &&
-          runtimeType == other.runtimeType &&
-          id == other.id &&
-          name == other.name &&
-          status == other.status &&
-          position == other.position &&
-          distanceMeters == other.distanceMeters;
-
-  @override
-  int get hashCode => Object.hash(id, name, status, position, distanceMeters);
-}
-
-/// Fungsi pembantu untuk memformat jarak agar mudah dibaca.
-/// Di bawah 1000m ditampilkan dalam meter (m), selain itu kilometer (km).
-String formatDistance(double m) =>
-    m < 1000 ? '${m.round()} m' : '${(m / 1000).toStringAsFixed(1)} km';
+import '../models/group_member_model.dart';
+export '../models/group_member_model.dart';
 
 class _MarkerLayerData {
   final List<GroupMember> members;
@@ -275,25 +234,11 @@ class _MapPageState extends State<MapPage> {
     final currentUser = authProvider.user;
     if (activeGroup == null || currentUser == null) return;
 
-    final granted = await locationProvider.requestPermissions();
-    if (!mounted) return;
-    if (!granted) {
-      // Tetap muat rute dari tujuan grup meskipun izin GPS background belum diberikan penuh
-      await locationProvider.startTracking(
-        groupId: activeGroup.id,
-        uid: currentUser.uid,
-        userName:
-            authProvider.userProfile?.name ?? currentUser.displayName ?? 'Anda',
-        tripName: activeGroup.name,
-        initialDestination: activeGroup.destination,
-        vehicleType: activeGroup.type,
-      );
-      return;
-    }
-
     final displayName =
         authProvider.userProfile?.name ?? currentUser.displayName ?? 'Anda';
 
+    // Selalu pasang listener group_ended agar anggota otomatis keluar jika host menyelesaikan grup,
+    // bahkan jika izin GPS belum diberikan secara penuh.
     _groupEndedSubscription?.cancel();
     _groupEndedSubscription = locationProvider.onGroupEnded.listen((endedGroupId) async {
       if (!mounted) return;
@@ -303,6 +248,18 @@ class _MapPageState extends State<MapPage> {
       }
     });
 
+    final granted = await locationProvider.requestPermissions();
+    if (!mounted) return;
+
+    if (!granted) {
+      // Jika izin lokasi ditolak permanen, tampilkan dialog edukasi bantuan
+      final isPermanentlyDenied = await Permission.location.isPermanentlyDenied;
+      if (isPermanentlyDenied && mounted) {
+        await PermissionService.showPermissionDeniedDialog(context);
+      }
+      if (!mounted) return;
+    }
+
     await locationProvider.startTracking(
       groupId: activeGroup.id,
       uid: currentUser.uid,
@@ -310,6 +267,7 @@ class _MapPageState extends State<MapPage> {
       tripName: activeGroup.name,
       initialDestination: activeGroup.destination,
       vehicleType: activeGroup.type,
+      hostUid: activeGroup.hostUid,
     );
   }
 
@@ -607,7 +565,7 @@ class _MapPageState extends State<MapPage> {
     final result = await showModalBottomSheet<_DestinationSheetResult>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).cardColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -949,51 +907,23 @@ class _MapPageState extends State<MapPage> {
       final locationProvider = context.read<LocationProvider>();
 
       final activeGroup = groupProvider.activeGroup;
-      final groupId = activeGroup?.id;
       final uid = authProvider.user?.uid;
 
-      // 1. Susun & simpan riwayat perjalanan ke Supabase sebelum menghentikan state tracking
-      if (uid != null && activeGroup != null) {
-        try {
-          final completedTrip = locationProvider.buildCompletedTripHistory(
-            groupName: activeGroup.name,
-            rawDestination: activeGroup.destination,
-            groupType: activeGroup.type,
-            isHost: isHost,
-            fallbackMemberCount: activeGroup.memberCount,
-            groupCreatedAt: activeGroup.createdAt,
-          );
-          await TripService().saveTrip(uid: uid, trip: completedTrip);
-        } catch (e) {
-          debugPrint('Error saving trip history on finish: $e');
-        }
-      }
-
-      // 2. Siarkan event group_ended jika Host, agar semua anggota langsung terinfo
-      if (isHost && groupId != null) {
-        try {
-          await locationProvider.broadcastGroupEnded(groupId);
-        } catch (e) {
-          debugPrint('Error broadcasting group_ended: $e');
-        }
-      }
-
-      // 3. Hentikan tracking lokasi
-      await locationProvider.stopTracking(groupId: groupId, uid: uid);
-
-      // 4. Akhiri grup (jika Host) atau keluar grup (jika Member)
-      if (uid != null && groupId != null) {
-        if (isHost) {
-          await groupProvider.endGroup();
-        } else {
-          await groupProvider.leaveGroup(uid: uid);
-        }
-      }
+      // ARCH-06: Orkestrasi bisnis selesai perjalanan dipusatkan di LocationProvider
+      final tripSavedSuccessfully = await locationProvider.completeAndEndTrip(
+        uid: uid,
+        activeGroup: activeGroup,
+        isHost: isHost,
+        groupProvider: groupProvider,
+      );
 
       if (mounted) {
+        final message = (uid == null || activeGroup == null || tripSavedSuccessfully)
+            ? '✅ Perjalanan selesai dan tersimpan di Riwayat!'
+            : '⚠️ Perjalanan selesai. Riwayat diamankan di perangkat lokal (koneksi terputus).';
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('✅ Perjalanan selesai dan tersimpan di Riwayat!'),
+          SnackBar(
+            content: Text(message),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -1013,31 +943,23 @@ class _MapPageState extends State<MapPage> {
     final activeGroup = groupProvider.activeGroup;
     final uid = authProvider.user?.uid;
 
-    if (uid != null && activeGroup != null) {
-      try {
-        final completedTrip = locationProvider.buildCompletedTripHistory(
-          groupName: activeGroup.name,
-          rawDestination: activeGroup.destination,
-          groupType: activeGroup.type,
-          isHost: false,
-          fallbackMemberCount: activeGroup.memberCount,
-          groupCreatedAt: activeGroup.createdAt,
-        );
-        await TripService().saveTrip(uid: uid, trip: completedTrip);
-      } catch (e) {
-        debugPrint('Error saving member trip history on remote group end: $e');
-      }
-    }
-
-    await locationProvider.stopTracking(groupId: activeGroup?.id, uid: uid);
-    groupProvider.clearActiveGroup();
+    // ARCH-06: Orkestrasi bisnis selesai perjalanan dipusatkan di LocationProvider
+    final tripSavedSuccessfully = await locationProvider.completeAndEndTrip(
+      uid: uid,
+      activeGroup: activeGroup,
+      isHost: false,
+      groupProvider: groupProvider,
+    );
 
     if (mounted) {
+      final message = (uid == null || activeGroup == null || tripSavedSuccessfully)
+          ? 'Perjalanan telah diakhiri oleh Host. Riwayat Anda telah disimpan.'
+          : 'Perjalanan telah diakhiri. Riwayat diamankan di perangkat lokal (koneksi terputus).';
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Perjalanan telah diakhiri oleh Host. Riwayat Anda telah disimpan.'),
+        SnackBar(
+          content: Text(message),
           behavior: SnackBarBehavior.floating,
-          duration: Duration(seconds: 4),
+          duration: const Duration(seconds: 4),
         ),
       );
       setState(() => _canPopNow = true);
@@ -1082,6 +1004,8 @@ class _MapPageState extends State<MapPage> {
       if (groupId != null && uid != null) {
         await locationProvider.triggerSOS(groupId: groupId, uid: uid);
       }
+
+      if (!mounted) return;
 
       setState(() {
         final index = _fallbackMembers.indexWhere((m) => m.id == 'anda');
@@ -1161,7 +1085,7 @@ class _MapPageState extends State<MapPage> {
                     TileLayer(
                       urlTemplate:
                           'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                      userAgentPackageName: 'com.example.trackie',
+                      userAgentPackageName: 'com.trackie.app',
                     ),
                     const _MapRouteLayer(),
                     _MapMarkersLayer(
@@ -1507,12 +1431,12 @@ class _DestinationSearchSheetState extends State<_DestinationSearchSheet> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     'Atur Tujuan Rute (Host)',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF1A1A2E),
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                   IconButton(
@@ -1555,7 +1479,9 @@ class _DestinationSearchSheetState extends State<_DestinationSearchSheet> {
                           ),
                         ),
                   filled: true,
-                  fillColor: const Color(0xFFF7F7FA),
+                  fillColor: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white10
+                      : const Color(0xFFF7F7FA),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
                     borderSide: BorderSide.none,

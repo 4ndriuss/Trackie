@@ -31,32 +31,26 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8
   google_fonts: ^8.2.1
   geolocator: ^14.1.1
 
   # State Management
   provider: ^6.1.4
 
-  # Utilities
-  uuid: ^4.5.1
-
   # Background Location Tracking
   flutter_background_service: ^5.1.0
   flutter_local_notifications: ^18.0.1
-  permission_handler: ^11.3.1
+  permission_handler: ^11.4.0
   share_plus: ^13.3.0
   image_picker: ^1.2.3
   cached_network_image: ^4.0.4
   intl: ^0.20.3
   shared_preferences: ^2.5.5
+  flutter_secure_storage: ^10.3.4
   flutter_localizations:
     sdk: flutter
   country_code_picker: ^3.4.1
-  google_sign_in: 6.2.1
-  flutter_facebook_auth: ^7.2.0
+  google_sign_in: ^6.2.2
   supabase_flutter: ^2.18.3
   flutter_map: ^8.3.2
   latlong2: ^0.10.1
