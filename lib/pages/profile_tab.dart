@@ -99,9 +99,9 @@ class _ProfileTabState extends State<ProfileTab> {
     final joinedDate = user != null ? DateFormat('MMM yyyy').format(user.createdAt) : 'Unknown';
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F7FA),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor ?? Theme.of(context).cardColor,
         elevation: 0,
         centerTitle: false,
         title: Text(
@@ -109,7 +109,7 @@ class _ProfileTabState extends State<ProfileTab> {
           style: GoogleFonts.urbanist(
             fontSize: 18,
             fontWeight: FontWeight.w600,
-            color: const Color(0xFF1A1A2E),
+            color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
         actions: [
@@ -123,11 +123,17 @@ class _ProfileTabState extends State<ProfileTab> {
               child: Container(
                 width: 44,
                 height: 44,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFF1F1F5),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white12
+                      : const Color(0xFFF1F1F5),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.settings_outlined, color: Color(0xFF1A1A2E), size: 22),
+                child: Icon(
+                  Icons.settings_outlined,
+                  color: Theme.of(context).colorScheme.onSurface,
+                  size: 22,
+                ),
               ),
             ),
           ),
@@ -135,7 +141,7 @@ class _ProfileTabState extends State<ProfileTab> {
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(
-            color: const Color(0xFFEDEDF2),
+            color: Theme.of(context).dividerColor,
             height: 1,
           ),
         ),
@@ -194,7 +200,7 @@ class _ProfileTabState extends State<ProfileTab> {
                       style: GoogleFonts.urbanist(
                         fontSize: 28,
                         fontWeight: FontWeight.bold,
-                        color: const Color(0xFF1A1A2E),
+                        color: Theme.of(context).colorScheme.onSurface,
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -215,7 +221,7 @@ class _ProfileTabState extends State<ProfileTab> {
               // 3. Stats Card
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Theme.of(context).cardColor,
                   borderRadius: BorderRadius.circular(20),
                 ),
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -238,7 +244,7 @@ class _ProfileTabState extends State<ProfileTab> {
               // 5. Account & Settings Section
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.white,
+                  color: Theme.of(context).cardColor,
                   borderRadius: BorderRadius.circular(24),
                 ),
                 padding: const EdgeInsets.all(16),
@@ -359,7 +365,7 @@ class StatItem extends StatelessWidget {
           style: GoogleFonts.urbanist(
             fontSize: 24,
             fontWeight: FontWeight.w600,
-            color: const Color(0xFF1A1A2E),
+            color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
         const SizedBox(height: 4),
@@ -412,7 +418,7 @@ class StreakBanner extends StatelessWidget {
                   style: GoogleFonts.urbanist(
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white,
+                    color: Theme.of(context).cardColor,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -465,7 +471,7 @@ class ProfileMenuTile extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFF1F1F5),
+                  color: Theme.of(context).brightness == Brightness.dark ? Colors.white12 : const Color(0xFFF1F1F5),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: Icon(icon, color: iconColor ?? const Color(0xFF6B6F9A), size: 22),
@@ -477,7 +483,7 @@ class ProfileMenuTile extends StatelessWidget {
                   style: GoogleFonts.urbanist(
                     fontSize: 17,
                     fontWeight: FontWeight.w500,
-                    color: titleColor ?? const Color(0xFF1A1A2E),
+                    color: titleColor ?? Theme.of(context).colorScheme.onSurface,
                   ),
                 ),
               ),
@@ -485,7 +491,7 @@ class ProfileMenuTile extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF1F1F5),
+                    color: Theme.of(context).brightness == Brightness.dark ? Colors.white12 : const Color(0xFFF1F1F5),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(

@@ -231,12 +231,12 @@ class _LoginPageState extends State<LoginPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF1A1A1A)),
+          icon: Icon(Icons.arrow_back, color: Theme.of(context).colorScheme.onSurface),
           onPressed: () {
             Navigator.pushReplacement(
               context,
@@ -267,7 +267,7 @@ class _LoginPageState extends State<LoginPage> {
                             style: GoogleFonts.urbanist(
                               fontSize: 20,
                               fontWeight: FontWeight.bold,
-                              color: const Color(0xFF1A1A1A),
+                              color: Theme.of(context).colorScheme.onSurface,
                             ),
                           ),
                         ],
@@ -278,7 +278,7 @@ class _LoginPageState extends State<LoginPage> {
                         style: GoogleFonts.urbanist(
                           fontSize: 32,
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF1A1A1A),
+                          color: Theme.of(context).colorScheme.onSurface,
                           height: 1.2,
                         ),
                       ),
@@ -342,7 +342,7 @@ class _LoginPageState extends State<LoginPage> {
                       const SizedBox(height: 32),
                       Row(
                         children: [
-                          const Expanded(child: Divider(color: Color(0xFFE5E7EB))),
+                          Expanded(child: Divider(color: Theme.of(context).dividerColor)),
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 16),
                             child: Text(
@@ -353,7 +353,7 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                             ),
                           ),
-                          const Expanded(child: Divider(color: Color(0xFFE5E7EB))),
+                          Expanded(child: Divider(color: Theme.of(context).dividerColor)),
                         ],
                       ),
                       const SizedBox(height: 32),

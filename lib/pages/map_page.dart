@@ -607,7 +607,7 @@ class _MapPageState extends State<MapPage> {
     final result = await showModalBottomSheet<_DestinationSheetResult>(
       context: context,
       isScrollControlled: true,
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).cardColor,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -1507,12 +1507,12 @@ class _DestinationSearchSheetState extends State<_DestinationSearchSheet> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
+                  Text(
                     'Atur Tujuan Rute (Host)',
                     style: TextStyle(
                       fontSize: 20,
                       fontWeight: FontWeight.bold,
-                      color: Color(0xFF1A1A2E),
+                      color: Theme.of(context).colorScheme.onSurface,
                     ),
                   ),
                   IconButton(
@@ -1555,7 +1555,9 @@ class _DestinationSearchSheetState extends State<_DestinationSearchSheet> {
                           ),
                         ),
                   filled: true,
-                  fillColor: const Color(0xFFF7F7FA),
+                  fillColor: Theme.of(context).brightness == Brightness.dark
+                      ? Colors.white10
+                      : const Color(0xFFF7F7FA),
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(14),
                     borderSide: BorderSide.none,

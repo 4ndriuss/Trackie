@@ -49,10 +49,10 @@ class _SignupPageState extends State<SignupPage> {
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: ColorScheme.light(
+            colorScheme: Theme.of(context).brightness == Brightness.dark ? ColorScheme.dark(primary: AppTheme.primary, onPrimary: Colors.white, surface: Theme.of(context).cardColor) : ColorScheme.light(
               primary: AppTheme.primary,
               onPrimary: Colors.white,
-              onSurface: const Color(0xFF1A1A1A),
+              onSurface: Theme.of(context).brightness == Brightness.dark ? Colors.white : const Color(0xFF1A1A1A),
             ),
           ),
           child: child!,
@@ -119,13 +119,14 @@ class _SignupPageState extends State<SignupPage> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Color(0xFF1A1A1A)),
+          icon: Icon(Icons.arrow_back, color: Theme.of(context).colorScheme.onSurface),
           onPressed: () => Navigator.pop(context),
         ),
       ),
@@ -146,7 +147,7 @@ class _SignupPageState extends State<SignupPage> {
                         style: GoogleFonts.urbanist(
                           fontSize: 32,
                           fontWeight: FontWeight.bold,
-                          color: const Color(0xFF1A1A1A),
+                          color: Theme.of(context).colorScheme.onSurface,
                           height: 1.2,
                         ),
                       ),
@@ -196,7 +197,7 @@ class _SignupPageState extends State<SignupPage> {
                           height: 52,
                           padding: const EdgeInsets.symmetric(horizontal: 16),
                           decoration: BoxDecoration(
-                            border: Border.all(color: const Color(0xFFE5E7EB)),
+                            border: Border.all(color: theme.dividerColor),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Row(
@@ -207,7 +208,7 @@ class _SignupPageState extends State<SignupPage> {
                                     ? 'dd/mm/yyyy'
                                     : DateFormat('dd/MM/yyyy').format(_selectedBirthDate!),
                                 style: GoogleFonts.urbanist(
-                                  color: _selectedBirthDate == null ? const Color(0xFF9CA3AF) : const Color(0xFF1A1A1A),
+                                  color: _selectedBirthDate == null ? const Color(0xFF9CA3AF) : theme.colorScheme.onSurface,
                                   fontSize: 14,
                                 ),
                               ),
@@ -238,7 +239,7 @@ class _SignupPageState extends State<SignupPage> {
                       Container(
                         height: 52,
                         decoration: BoxDecoration(
-                          border: Border.all(color: const Color(0xFFE5E7EB)),
+                          border: Border.all(color: theme.dividerColor),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Row(
@@ -256,13 +257,13 @@ class _SignupPageState extends State<SignupPage> {
                               padding: EdgeInsets.zero,
                               textStyle: GoogleFonts.urbanist(
                                 fontSize: 14,
-                                color: const Color(0xFF1A1A1A),
+                                color: Theme.of(context).colorScheme.onSurface,
                               ),
                             ),
                             Container(
                               width: 1,
                               height: 32,
-                              color: const Color(0xFFE5E7EB),
+                              color: theme.dividerColor,
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -271,7 +272,7 @@ class _SignupPageState extends State<SignupPage> {
                                 keyboardType: TextInputType.phone,
                                 style: GoogleFonts.urbanist(
                                   fontSize: 14,
-                                  color: const Color(0xFF1A1A1A),
+                                  color: Theme.of(context).colorScheme.onSurface,
                                 ),
                                 decoration: const InputDecoration(
                                   hintText: '(454) 726-0592',

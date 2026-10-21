@@ -136,9 +136,9 @@ class _HistoryTabState extends State<HistoryTab> {
     final numberFormat = NumberFormat.decimalPattern('id');
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF7F7FA),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor ?? Theme.of(context).cardColor,
         elevation: 0,
         centerTitle: false,
         title: Text(
@@ -146,13 +146,13 @@ class _HistoryTabState extends State<HistoryTab> {
           style: GoogleFonts.urbanist(
             fontSize: 18,
             fontWeight: FontWeight.w600,
-            color: const Color(0xFF1A1A2E),
+            color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Container(
-            color: const Color(0xFFEDEDF2),
+            color: Theme.of(context).dividerColor,
             height: 1,
           ),
         ),
@@ -206,7 +206,7 @@ class _HistoryTabState extends State<HistoryTab> {
                               style: GoogleFonts.urbanist(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w700,
-                                color: const Color(0xFF1A1A2E),
+                                color: Theme.of(context).colorScheme.onSurface,
                               ),
                             ),
                             const SizedBox(height: 6),
@@ -239,10 +239,10 @@ class _HistoryTabState extends State<HistoryTab> {
                       return Container(
                         margin: const EdgeInsets.only(bottom: 16),
                         decoration: BoxDecoration(
-                          color: Colors.white,
+                          color: Theme.of(context).cardColor,
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
-                            color: const Color(0xFFEDEDF2),
+                            color: Theme.of(context).dividerColor,
                             width: 1,
                           ),
                         ),
@@ -278,7 +278,7 @@ class _HistoryTabState extends State<HistoryTab> {
                                               style: GoogleFonts.urbanist(
                                                 fontSize: 17,
                                                 fontWeight: FontWeight.w700,
-                                                color: const Color(0xFF1A1A2E),
+                                                color: Theme.of(context).colorScheme.onSurface,
                                               ),
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
@@ -358,7 +358,7 @@ class _HistoryTabState extends State<HistoryTab> {
                                               style: GoogleFonts.urbanist(
                                                 fontSize: 15,
                                                 fontWeight: FontWeight.w600,
-                                                color: const Color(0xFF1A1A2E),
+                                                color: Theme.of(context).colorScheme.onSurface,
                                               ),
                                               maxLines: 1,
                                               overflow: TextOverflow.ellipsis,
@@ -377,7 +377,9 @@ class _HistoryTabState extends State<HistoryTab> {
                                       vertical: 12,
                                     ),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFF7F7FA),
+                                      color: Theme.of(context).brightness == Brightness.dark
+                                          ? Colors.white10
+                                          : const Color(0xFFF7F7FA),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Row(
@@ -424,7 +426,7 @@ class _HistoryTabState extends State<HistoryTab> {
           style: GoogleFonts.urbanist(
             fontSize: 13,
             fontWeight: FontWeight.w600,
-            color: const Color(0xFF1A1A2E),
+            color: Theme.of(context).colorScheme.onSurface,
           ),
         ),
       ],

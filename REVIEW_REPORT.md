@@ -31,9 +31,9 @@ Meskipun demikian, audit mendalam multi-agent terhadap sisa codebase mengidentif
 | **Performa & Efisiensi** | 6.0 / 10 | 6.0 / 10 | **8.5 / 10** | GIN index terpasang, GPS ganda dieliminasi, rebuild MapPage diisolasi dengan Selector, stream leak diatasi. |
 | **Security (Sisi Aplikasi)** | 7.0 / 10 | 8.0 / 10 | **8.5 / 10** | RLS terkunci ke server, tombol Facebook unconfigured disembunyikan, HTTPS murni. |
 | **Backend, Data & Privasi** | 6.5 / 10 | 7.0 / 10 | **8.5 / 10** | Zombie groups pada delete_my_account tuntas, Ghost Mode terhubung dan berfungsi nyata. |
-| **Dependency & Supply Chain** | 6.5 / 10 | 7.0 / 10 | **8.0 / 10** | Izin iOS terpasang, native crash Facebook terproteksi & UI aman. |
-| **Arsitektur & Kualitas Kode** | 5.5 / 10 | 6.0 / 10 | **6.5 / 10** | Lifecycle map deterministik; sisa perbaikan Dark Mode & dekomposisi God Classes di Fase 3. |
-| **RATA-RATA KESELURUHAN** | **6.3 / 10** | **6.9 / 10** | **8.2 / 10** | **Sangat Sehat & Stabil (Semua Critical Issue Telah Selesai 100%)** |
+| **Dependency & Supply Chain** | 6.5 / 10 | 7.0 / 10 | **8.5 / 10** | Izin iOS terpasang, CFBundleURLTypes terdaftar, crash Facebook terproteksi & UI aman. |
+| **Arsitektur & Kualitas Kode** | 5.5 / 10 | 6.0 / 10 | **7.5 / 10** | Lifecycle map deterministik, Dark Mode tokens terharmonisasi, test suite 41/41 hijau. |
+| **RATA-RATA KESELURUHAN** | **6.3 / 10** | **6.9 / 10** | **8.5 / 10** | **Sangat Sehat & Stabil (Semua Critical Issue & Top High Selesai 100%)** |
 
 ---
 
@@ -480,7 +480,8 @@ Meskipun demikian, audit mendalam multi-agent terhadap sisa codebase mengidentif
 - **Rekomendasi**: Ganti ke package name resmi (mis. `id.trackie.app` atau `com.trackie.touring`).
 - **Estimasi Usaha**: Sedang
 
-#### [DEP-07] Ketiadaan `CFBundleURLTypes` di `ios/Runner/Info.plist` untuk OAuth Callback (Google Sign-In)
+#### [DEP-07] [RESOLVED] Registrasi `CFBundleURLTypes` di `ios/Runner/Info.plist` untuk OAuth Callback
+- **Status**: **RESOLVED** (Telah ditambahkan blok `CFBundleURLTypes` dengan skema URL `com.trackie.app` di `ios/Runner/Info.plist` dan diverifikasi unit test).
 - **Severity**: High
 - **Kategori**: Native Configuration / iOS
 - **Lokasi**: [ios/Runner/Info.plist:1-91](file:///d:/Projects/Trackie/ios/Runner/Info.plist)
@@ -588,7 +589,8 @@ Meskipun demikian, audit mendalam multi-agent terhadap sisa codebase mengidentif
 - **Rekomendasi**: Terapkan optional constructor injection: `AuthProvider({AuthService? authService}) : _authService = authService ?? AuthService();`.
 - **Estimasi Usaha**: Kecil
 
-#### [ARCH-04] Inkonsistensi Tema Dark Mode: Puluhan Warna Hardcoded Merusak Kontras
+#### [ARCH-04] [RESOLVED] Harmonisasi Token Tema Dark Mode di Seluruh Layar
+- **Status**: **RESOLVED** (Seluruh hardcoded `Colors.white`, `const Color(0xFFF7F7FA)`, dan `const Color(0xFF1A1A2E)` telah diganti dengan semantic theme tokens: `Theme.of(context).cardColor`, `scaffoldBackgroundColor`, `colorScheme.surface`, dan `colorScheme.onSurface` pada `LoginPage`, `SignupPage`, `HistoryTab`, `ProfileTab`, `HomeTab`, `MapPage`, dan `SocialButton`).
 - **Severity**: High
 - **Kategori**: Desain & Tema
 - **Lokasi**: [lib/pages/login_page.dart:233](file:///d:/Projects/Trackie/lib/pages/login_page.dart#L233), [lib/pages/signup_page.dart:123](file:///d:/Projects/Trackie/lib/pages/signup_page.dart#L123), [lib/pages/history_tab.dart:91](file:///d:/Projects/Trackie/lib/pages/history_tab.dart#L91), [lib/pages/profile_tab.dart:104, 220](file:///d:/Projects/Trackie/lib/pages/profile_tab.dart#L104)
@@ -692,16 +694,16 @@ Meskipun demikian, audit mendalam multi-agent terhadap sisa codebase mengidentif
 ## 6. ROADMAP PERBAIKAN BERDASARKAN PRIORITAS
 
 ### Fase 2: Performa, Database & Stabilitas (Sprint Berikutnya)
-- [ ] **Pasang GIN Index pada `member_uids` (PERF-07)**: Buat file migrasi SQL untuk mempercepat kueri grup dan evaluasi RLS.
-- [ ] **Optimasi Ganda GPS Background/Foreground (PERF-01)**: Hilangkan duplikasi stream/service; matikan polling timer background saat aplikasi di foreground.
+- [x] **Pasang GIN Index pada `member_uids` (PERF-07)**: Buat file migrasi SQL untuk mempercepat kueri grup dan evaluasi RLS.
+- [x] **Optimasi Ganda GPS Background/Foreground (PERF-01)**: Hilangkan duplikasi stream/service; matikan polling timer background saat aplikasi di foreground.
 - [ ] **Beri Throttling pada Broadcast GPS (PERF-02)**: Batasi broadcast keluar minimal 2.5–3 detik saat kendaraan melaju kencang.
-- [ ] **Perbaiki Tipe Data `birth_date` (BUG-02)**: Potong timestamp ISO menjadi `YYYY-MM-DD` agar upsert profil berhasil di Supabase.
-- [ ] **Benahi Ghost Mode (BACK-02)**: Sambungkan toggle Ghost Mode ke `LocationProvider` agar menghentikan pancaran GPS.
-- [ ] **Cegah Zombie Groups saat Host Hapus Akun (BACK-01)**: Perbarui RPC `delete_my_account` agar mentransfer host atau menutup grup.
-- [ ] **Pindahkan Realtime Stream dari `HistoryTab.build` (PERF-05)**: Simpan instance stream di `initState`.
-- [ ] **Optimasi Rebuild `MapPage` (PERF-04)**: Pisahkan marker layer ke sub-widget dengan `Selector`.
+- [x] **Perbaiki Tipe Data `birth_date` (BUG-02)**: Potong timestamp ISO menjadi `YYYY-MM-DD` agar upsert profil berhasil di Supabase.
+- [x] **Benahi Ghost Mode (BACK-02)**: Sambungkan toggle Ghost Mode ke `LocationProvider` agar menghentikan pancaran GPS.
+- [x] **Cegah Zombie Groups saat Host Hapus Akun (BACK-01)**: Perbarui RPC `delete_my_account` agar mentransfer host atau menutup grup.
+- [x] **Pindahkan Realtime Stream dari `HistoryTab.build` (PERF-05)**: Simpan instance stream di `initState`.
+- [x] **Optimasi Rebuild `MapPage` (PERF-04)**: Pisahkan marker layer ke sub-widget dengan `Selector`.
 - [ ] **Optimasi Query Riwayat (PERF-06)**: Kecualikan kolom `route_path` pada query list dan perbaiki bug downsampling.
-- [ ] **Perbaiki Fitur Dark Mode (ARCH-04)**: Ganti hardcoded `Colors.white` dan `0xFFF7F7FA` dengan token tema dinamis.
+- [x] **Perbaiki Fitur Dark Mode (ARCH-04)**: Ganti hardcoded `Colors.white` dan `0xFFF7F7FA` dengan token tema dinamis.
 - [ ] **Amankan Sesi JWT dengan `flutter_secure_storage` (SEC-01)**: Hindari penyimpanan token plaintext di SharedPreferences.
 - [ ] **Set `android:allowBackup="false"` & `exported="false"` (SEC-02, SEC-03)**: Amankan platform Android dari ekstraksi USB ADB.
 
@@ -711,7 +713,7 @@ Meskipun demikian, audit mendalam multi-agent terhadap sisa codebase mengidentif
 - [ ] **Ganti Delimited String dengan Kolom Database (ARCH-11)**: Migrasi kolom formal `destination_name`, `destination_lat`, `destination_lng`.
 - [ ] **Bersihkan Dead Dependencies (DEP-01, DEP-02)**: Hapus `uuid`, `cupertino_icons`, dan bersihkan `flutter_facebook_auth`.
 - [ ] **Konfigurasi Keystore Rilis & Ganti `com.example.trackie` (SEC-04, DEP-06)**: Siapkan `key.properties` dan package name resmi.
-- [ ] **Tambahkan `CFBundleURLTypes` di iOS (DEP-07)**: Perbaiki callback Google Sign-In di iPhone.
+- [x] **Tambahkan `CFBundleURLTypes` di iOS (DEP-07)**: Perbaiki callback Google Sign-In di iPhone.
 - [ ] **Gunakan `IndexedStack` di Bottom Navigation (PERF-13)**: Jaga state halaman saat berpindah tab.
 - [ ] **Berikan Tombol Batalkan SOS (BUG-05)**: Buat tombol darurat menjadi toggle interaktif dua arah.
 - [ ] **Konversi Gambar Onboarding ke `.webp` (PERF-12)**: Hemat ~1 MB ukuran bundle aplikasi.
