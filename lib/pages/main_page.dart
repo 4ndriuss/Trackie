@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../providers/auth_provider.dart';
 import '../providers/group_provider.dart';
+import '../providers/subscription_provider.dart';
 import '../theme/app_theme.dart';
 import 'home_tab.dart';
 import 'history_tab.dart';
@@ -33,6 +34,7 @@ class _MainPageState extends State<MainPage> {
       final uid = context.read<AuthProvider>().user?.uid;
       if (uid != null) {
         context.read<GroupProvider>().loadActiveGroup(uid);
+        context.read<SubscriptionProvider>().initializeForUser(uid);
       }
     });
   }
@@ -86,4 +88,3 @@ class _MainPageState extends State<MainPage> {
     );
   }
 }
-

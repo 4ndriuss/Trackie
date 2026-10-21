@@ -8,10 +8,12 @@ import 'theme/app_theme.dart';
 import 'app.dart';
 import 'pages/login_page.dart';
 import 'pages/main_page.dart';
+import 'pages/subscription_page.dart';
 import 'providers/auth_provider.dart';
 import 'providers/group_provider.dart';
 import 'providers/location_provider.dart';
 import 'providers/locale_provider.dart';
+import 'providers/subscription_provider.dart';
 import 'services/background_location_service.dart';
 import 'supabase_config.dart';
 
@@ -49,6 +51,7 @@ class TrackieApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => AuthProvider()..init()),
         ChangeNotifierProvider(create: (_) => GroupProvider()),
         ChangeNotifierProvider(create: (_) => LocationProvider()),
+        ChangeNotifierProvider(create: (_) => SubscriptionProvider()),
       ],
       child: ValueListenableBuilder<ThemeMode>(
         valueListenable: themeNotifier,
@@ -76,6 +79,12 @@ class TrackieApp extends StatelessWidget {
               '/': (context) => const AuthWrapper(),
               '/login': (context) => const LoginPage(),
               '/home': (context) => const MainPage(),
+              '/subscription': (context) => const SubscriptionPage(
+                    isFirstTimeFlow: false,
+                  ),
+              '/subscription-onboarding': (context) => const SubscriptionPage(
+                    isFirstTimeFlow: true,
+                  ),
             },
           );
         },

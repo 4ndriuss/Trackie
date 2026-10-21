@@ -5,7 +5,7 @@ class TripHistoryModel {
   /// Unique Identifier riwayat perjalanan
   final String id;
 
-  /// Nama grup perjalanan
+  /// Nama grup perjalanan (dapat memuat metadata `groupName||destination||role`)
   final String groupName;
 
   /// Jenis/tipe kendaraan ('motor', 'mobil', 'sepeda')
@@ -14,7 +14,7 @@ class TripHistoryModel {
   /// Total jarak tempuh perjalanan dalam kilometer (km)
   final double distanceKm;
 
-  /// Durasi perjalanan dalam format string (misal: "1j 45m" atau "01:45:00")
+  /// Durasi perjalanan dalam format string (misal: "1j 45m" atau "45m")
   final String duration;
 
   /// Daftar koordinat rute perjalanan berupa list pasangan latitude dan longitude
@@ -50,10 +50,57 @@ class TripHistoryModel {
     this.rating,
   });
 
+  /// Mengemas nama grup, tujuan, dan peran pengguna ke dalam satu string `group_name`
+  /// agar tersimpan utuh di tabel `public.trip_history` tanpa ubah skema SQL.
+  static String encodeGroupMeta({
+    required String groupName,
+    required String destination,
+    required String role,
+  }) {
+    final cleanGroup = groupName.replaceAll('||', ' ').trim();
+    final cleanDest = destination.replaceAll('||', ' ').trim();
+    final cleanRole = role.replaceAll('||', ' ').trim();
+    return '$cleanGroup||$cleanDest||$cleanRole';
+  }
+
+  /// Nama grup bersih untuk ditampilkan di UI.
+  String get displayGroupName {
+    final parts = groupName.split('||');
+    return parts.first.trim().isNotEmpty ? parts.first.trim() : 'Perjalanan';
+  }
+
+  /// Nama tujuan perjalanan yang diekstrak dari metadata.
+  String get destinationName {
+    final parts = groupName.split('||');
+    if (parts.length >= 2 && parts[1].trim().isNotEmpty) {
+      return parts[1].trim();
+    }
+    return displayGroupName;
+  }
+
+  /// Peran pengguna dalam perjalanan ('Host' atau 'Member').
+  String get role {
+    final parts = groupName.split('||');
+    if (parts.length >= 3 && parts[2].trim().isNotEmpty) {
+      return parts[2].trim();
+    }
+    return 'Host';
+  }
+
+  /// Kecepatan rata-rata dalam km/jam.
+  double get avgSpeedKmh {
+    final seconds = endedAt.difference(startedAt).inSeconds;
+    if (seconds <= 0 || distanceKm <= 0) return 0.0;
+    final hours = seconds / 3600.0;
+    final speed = distanceKm / hours;
+    // Batasi nilai wajar jika durasi pengetesan sangat singkat
+    return speed > 120.0 ? 40.0 : double.parse(speed.toStringAsFixed(1));
+  }
+
   /// Alias getter untuk [journalNote] guna kompatibilitas update
   String? get note => journalNote;
 
-  /// Menghasilkan representasi titik rute dalam bentuk [LatLng] untuk Google Maps
+  /// Menghasilkan representasi titik rute dalam bentuk [LatLng]
   List<LatLng> get routePoints => routePath
       .map((point) => LatLng(point['lat'] ?? 0.0, point['lng'] ?? 0.0))
       .toList();
@@ -62,15 +109,21 @@ class TripHistoryModel {
   factory TripHistoryModel.fromMap(Map<String, dynamic> map, [String? id]) {
     return TripHistoryModel(
       id: id ?? map['id'] as String? ?? '',
-      groupName: map['group_name'] as String? ?? map['groupName'] as String? ?? '',
-      groupType: map['group_type'] as String? ?? map['groupType'] as String? ?? 'motor',
-      distanceKm: (map['distance_km'] ?? map['distanceKm'] as num?)?.toDouble() ?? 0.0,
+      groupName:
+          map['group_name'] as String? ?? map['groupName'] as String? ?? '',
+      groupType:
+          map['group_type'] as String? ?? map['groupType'] as String? ?? 'motor',
+      distanceKm:
+          (map['distance_km'] ?? map['distanceKm'] as num?)?.toDouble() ?? 0.0,
       duration: map['duration'] as String? ?? '',
       routePath: _parseRoutePath(map['route_path'] ?? map['routePath']),
-      memberCount: (map['member_count'] ?? map['memberCount'] as num?)?.toInt() ?? 0,
+      memberCount:
+          (map['member_count'] ?? map['memberCount'] as num?)?.toInt() ?? 1,
       startedAt: _parseDateTime(map['started_at'] ?? map['startedAt']),
       endedAt: _parseDateTime(map['ended_at'] ?? map['endedAt']),
-      journalNote: map['journal_note'] as String? ?? map['journalNote'] as String? ?? map['note'] as String?,
+      journalNote: map['journal_note'] as String? ??
+          map['journalNote'] as String? ??
+          map['note'] as String?,
       rating: (map['rating'] as num?)?.toDouble(),
     );
   }

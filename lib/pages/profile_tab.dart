@@ -7,9 +7,13 @@ import 'package:intl/intl.dart';
 
 import '../theme/app_theme.dart';
 import '../providers/auth_provider.dart';
+import '../providers/group_provider.dart';
+import '../providers/location_provider.dart';
+import '../providers/subscription_provider.dart';
 import 'privacy_policy_page.dart';
 import 'preferences_page.dart';
 import 'account_page.dart';
+import 'subscription_page.dart';
 
 class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
@@ -35,6 +39,14 @@ class _ProfileTabState extends State<ProfileTab> {
           TextButton(
             onPressed: () async {
               Navigator.pop(ctx);
+              final locationProvider = context.read<LocationProvider>();
+              final groupProvider = context.read<GroupProvider>();
+              await locationProvider.stopTracking(
+                groupId: groupProvider.activeGroup?.id,
+                uid: context.read<AuthProvider>().user?.uid,
+              );
+              groupProvider.clearActiveGroup();
+              if (!context.mounted) return;
               await context.read<AuthProvider>().logout();
               if (context.mounted) {
                 Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
@@ -83,6 +95,7 @@ class _ProfileTabState extends State<ProfileTab> {
   @override
   Widget build(BuildContext context) {
     final user = context.watch<AuthProvider>().userProfile;
+    final subProvider = context.watch<SubscriptionProvider>();
     final userName = user?.name ?? 'User';
     final userVehicle = (user?.vehicle != null && user!.vehicle.isNotEmpty) ? user.vehicle : 'Trackie Explorer';
     final joinedDate = user != null ? DateFormat('MMM yyyy').format(user.createdAt) : 'Unknown';
@@ -143,7 +156,7 @@ class _ProfileTabState extends State<ProfileTab> {
                       children: [
                         CircleAvatar(
                           radius: 50,
-                          backgroundColor: AppTheme.primary.withValues(alpha: 0.2), // Adapted from lime green to Trackie Orange
+                          backgroundColor: AppTheme.primary.withValues(alpha: 0.2),
                           backgroundImage: (user?.photoUrl != null && user!.photoUrl!.isNotEmpty)
                               ? CachedNetworkImageProvider(user.photoUrl!)
                               : null,
@@ -153,7 +166,7 @@ class _ProfileTabState extends State<ProfileTab> {
                                   style: GoogleFonts.urbanist(
                                     fontSize: 36,
                                     fontWeight: FontWeight.bold,
-                                    color: AppTheme.primary, // Adapted from dark text
+                                    color: AppTheme.primary,
                                   ),
                                 )
                               : null,
@@ -201,7 +214,7 @@ class _ProfileTabState extends State<ProfileTab> {
               ),
               const SizedBox(height: 32),
 
-              // 3. Stats Card (Adapted to Trackie context but matching layout)
+              // 3. Stats Card
               Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -210,11 +223,11 @@ class _ProfileTabState extends State<ProfileTab> {
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Row(
                   children: [
-                    Expanded(child: const StatItem(value: '24', label: 'Routes')),
+                    const Expanded(child: StatItem(value: '24', label: 'Routes')),
                     Container(width: 1, height: 40, color: const Color(0xFFEDEDF2)),
-                    Expanded(child: const StatItem(value: '31', label: 'Tracked')),
+                    const Expanded(child: StatItem(value: '31', label: 'Tracked')),
                     Container(width: 1, height: 40, color: const Color(0xFFEDEDF2)),
-                    Expanded(child: const StatItem(value: '18', label: 'Places')),
+                    const Expanded(child: StatItem(value: '18', label: 'Places')),
                   ],
                 ),
               ),
@@ -224,7 +237,7 @@ class _ProfileTabState extends State<ProfileTab> {
               const StreakBanner(streakDays: 7, subtitle: 'Keep it up to unlock the Explorer badge!'),
               const SizedBox(height: 32),
 
-              // 5. Account Section
+              // 5. Account & Settings Section
               Container(
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -237,7 +250,7 @@ class _ProfileTabState extends State<ProfileTab> {
                     Padding(
                       padding: const EdgeInsets.only(left: 8, bottom: 16),
                       child: Text(
-                        'ACCOUNT',
+                        'ACCOUNT & SETTINGS',
                         style: GoogleFonts.urbanist(
                           fontSize: 13,
                           letterSpacing: 1,
@@ -246,6 +259,25 @@ class _ProfileTabState extends State<ProfileTab> {
                         ),
                       ),
                     ),
+                    ProfileMenuTile(
+                      icon: Icons.workspace_premium_rounded,
+                      iconColor: AppTheme.primary,
+                      title: 'Subscription',
+                      badge: subProvider.isPremium
+                          ? 'PREMIUM (${subProvider.usedGroupsCount}/${subProvider.maxGroups})'
+                          : 'FREE (${subProvider.usedGroupsCount}/${subProvider.maxGroups})',
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const SubscriptionPage(
+                              isFirstTimeFlow: false,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 12),
                     ProfileMenuTile(
                       icon: Icons.manage_accounts_outlined,
                       title: 'Account Details',
@@ -349,10 +381,10 @@ class StreakBanner extends StatelessWidget {
             width: 56,
             height: 56,
             decoration: BoxDecoration(
-              color: AppTheme.primary.withValues(alpha: 0.2), // Adapted to Trackie theme
+              color: AppTheme.primary.withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(16),
             ),
-            child: Icon(Icons.local_fire_department, color: AppTheme.primary, size: 32),
+            child: const Icon(Icons.local_fire_department, color: AppTheme.primary, size: 32),
           ),
           const SizedBox(width: 16),
           Expanded(
@@ -452,7 +484,7 @@ class ProfileMenuTile extends StatelessWidget {
                 ),
                 const SizedBox(width: 12),
               ],
-              Icon(Icons.chevron_right, color: const Color(0xFFC4C4D4), size: 24),
+              const Icon(Icons.chevron_right, color: Color(0xFFC4C4D4), size: 24),
             ],
           ),
         ),

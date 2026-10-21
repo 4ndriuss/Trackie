@@ -8,25 +8,9 @@ import 'login_page.dart';
 class OnboardingPage extends StatefulWidget {
   const OnboardingPage({super.key});
 
-  @override
-  State<OnboardingPage> createState() => _OnboardingPageState();
-}
+  static const int _cacheWidth = 800;
 
-class _OnboardingPageState extends State<OnboardingPage> {
-  final PageController _pageController = PageController();
-  int _currentIndex = 0;
-  bool _isNavigating = false;
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Preload images into memory so they appear instantly when swiping
-    for (var item in _items) {
-      precacheImage(AssetImage(item.imagePath), context);
-    }
-  }
-
-  final List<OnboardingItem> _items = [
+  static const List<OnboardingItem> items = [
     OnboardingItem(
       title: "Your Adventure Starts Here",
       description:
@@ -37,7 +21,7 @@ class _OnboardingPageState extends State<OnboardingPage> {
       title: "Track Your Daily Trips",
       description:
           "Effortlessly record your routes, analyze your travel patterns, and keep a detailed history of all your daily commutes.",
-      imagePath: "assets/images/paul-green-gOHfFgwyDNM-unsplash.jpg", 
+      imagePath: "assets/images/paul-green-gOHfFgwyDNM-unsplash.jpg",
     ),
     OnboardingItem(
       title: "Stay Connected With Friends",
@@ -46,6 +30,36 @@ class _OnboardingPageState extends State<OnboardingPage> {
       imagePath: "assets/images/toomas-tartes-Yizrl9N_eDA-unsplash.jpg",
     ),
   ];
+
+  /// Mengembalikan [ImageProvider] dengan kunci yang konsisten antara
+  /// `precacheImage` dan widget [Image] agar tidak terjadi cache miss.
+  static ImageProvider<Object> imageProvider(String imagePath) =>
+      ResizeImage.resizeIfNeeded(_cacheWidth, null, AssetImage(imagePath));
+
+  /// Preload semua gambar onboarding ke memori.
+  static Future<void> precacheAll(BuildContext context) async {
+    await Future.wait(
+      items.map((item) => precacheImage(imageProvider(item.imagePath), context)),
+    );
+  }
+
+  @override
+  State<OnboardingPage> createState() => _OnboardingPageState();
+}
+
+class _OnboardingPageState extends State<OnboardingPage> {
+  final PageController _pageController = PageController();
+  int _currentIndex = 0;
+  bool _isNavigating = false;
+
+  List<OnboardingItem> get _items => OnboardingPage.items;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Preload images into memory with matching ResizeImage key so they appear instantly
+    OnboardingPage.precacheAll(context);
+  }
 
   @override
   void dispose() {
@@ -168,13 +182,25 @@ class _OnboardingPageState extends State<OnboardingPage> {
       children: [
         ClipPath(
           clipper: CurvedClipper(),
-          child: SizedBox(
-            height: imageHeight,
-            width: double.infinity,
-            child: Image.asset(
-              item.imagePath, 
-              fit: BoxFit.cover,
-              cacheWidth: 800, // Memperkecil resolusi dekode agar jauh lebih cepat dan tidak lag
+          child: ColoredBox(
+            color: AppColors.imagePlaceholder,
+            child: SizedBox(
+              height: imageHeight,
+              width: double.infinity,
+              child: Image(
+                image: OnboardingPage.imageProvider(item.imagePath),
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+                frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                  if (wasSynchronouslyLoaded) return child;
+                  return AnimatedOpacity(
+                    opacity: frame == null ? 0.0 : 1.0,
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeOut,
+                    child: child,
+                  );
+                },
+              ),
             ),
           ),
         ),

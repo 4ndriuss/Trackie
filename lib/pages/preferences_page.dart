@@ -3,10 +3,12 @@ import 'package:provider/provider.dart';
 import '../theme/app_theme.dart';
 import '../main.dart';
 import '../providers/locale_provider.dart';
+import '../providers/subscription_provider.dart';
 import '../l10n/app_localizations.dart';
+import 'subscription_page.dart';
 
 /// [PreferencesPage] menampilkan pengaturan preferensi pengguna,
-/// termasuk pemilihan bahasa dan mode tampilan (Light/Dark).
+/// termasuk menu Subscription, pemilihan bahasa, dan mode tampilan (Light/Dark).
 class PreferencesPage extends StatefulWidget {
   const PreferencesPage({super.key});
 
@@ -25,6 +27,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final localeProvider = Provider.of<LocaleProvider>(context);
+    final subProvider = context.watch<SubscriptionProvider>();
 
     return Scaffold(
       appBar: AppBar(
@@ -36,6 +39,88 @@ class _PreferencesPageState extends State<PreferencesPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // === SUBSCRIPTION ===
+            _buildSectionTitle(theme, 'SUBSCRIPTION'),
+            const SizedBox(height: AppSpacing.sm),
+            Container(
+              decoration: BoxDecoration(
+                color: theme.colorScheme.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: theme.colorScheme.secondary.withValues(alpha: 0.2),
+                ),
+              ),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
+                leading: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: AppTheme.primary.withValues(alpha: 0.14),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(
+                    Icons.workspace_premium_rounded,
+                    color: AppTheme.primary,
+                    size: 24,
+                  ),
+                ),
+                title: Row(
+                  children: [
+                    const Text(
+                      'Subscription',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: subProvider.isPremium
+                            ? AppTheme.primary.withValues(alpha: 0.16)
+                            : theme.colorScheme.secondary.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        subProvider.isPremium ? 'PREMIUM' : 'FREE',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800,
+                          color: subProvider.isPremium
+                              ? AppTheme.primary
+                              : theme.colorScheme.secondary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                subtitle: Text(
+                  'Paket ${subProvider.subscription.planDisplayName} • ${subProvider.groupUsageText}',
+                ),
+                trailing: const Icon(Icons.chevron_right_rounded),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const SubscriptionPage(
+                        isFirstTimeFlow: false,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+
+            const SizedBox(height: AppSpacing.xl),
+
             // === BAHASA ===
             _buildSectionTitle(theme, AppLocalizations.of(context)!.languageSection),
             const SizedBox(height: AppSpacing.sm),
@@ -44,7 +129,7 @@ class _PreferencesPageState extends State<PreferencesPage> {
                 color: theme.colorScheme.surface,
                 borderRadius: BorderRadius.circular(16),
                 border: Border.all(
-                  color: theme.colorScheme.secondary.withValues(alpha: 0.2), // ignore: deprecated_member_use
+                  color: theme.colorScheme.secondary.withValues(alpha: 0.2),
                 ),
               ),
               child: RadioGroup<String>(

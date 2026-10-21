@@ -2,6 +2,7 @@
 // Service untuk menangani autentikasi pengguna menggunakan Supabase Auth
 // dan menyimpan/mengambil data profil dari tabel PostgreSQL 'profiles'.
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:flutter_facebook_auth/flutter_facebook_auth.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -178,12 +179,31 @@ class AuthService {
           await _ensureUserProfileExists(response.user!);
         }
         return response;
-      } else {
+      } else if (result.status == LoginStatus.cancelled) {
+        debugPrint('Facebook login cancelled by user');
         return null;
+      } else {
+        debugPrint('Facebook login failed: ${result.message}');
+        throw AuthException(
+          result.message ?? 'Login dengan Facebook tidak berhasil. Silakan coba lagi.',
+        );
       }
+    } on PlatformException catch (e) {
+      debugPrint('Facebook SDK PlatformException: ${e.code} - ${e.message}');
+      throw const AuthException(
+        'Facebook Login belum dikonfigurasi pada perangkat ini.',
+      );
+    } on MissingPluginException catch (e) {
+      debugPrint('Facebook SDK MissingPluginException: ${e.message}');
+      throw const AuthException(
+        'Facebook Login tidak didukung pada platform ini.',
+      );
     } catch (e) {
       debugPrint('Error signing in with Facebook: $e');
-      rethrow;
+      if (e is AuthException) rethrow;
+      throw AuthException(
+        'Terjadi kesalahan saat masuk dengan Facebook: $e',
+      );
     }
   }
 

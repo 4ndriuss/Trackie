@@ -20,6 +20,20 @@ class GroupService {
     return 'TRG-$code';
   }
 
+  /// Menghitung jumlah grup yang telah dibuat atau diikuti oleh user.
+  Future<int> getUserGroupCount(String uid) async {
+    try {
+      final rows = await _supabase
+          .from('groups')
+          .select('id')
+          .contains('member_uids', [uid]);
+      return (rows as List).length;
+    } catch (e) {
+      debugPrint('Error getting user group count: $e');
+      return 0;
+    }
+  }
+
   /// Membuat grup baru dan mengembalikan [GroupModel].
   /// Keunikan kode undangan dijamin oleh constraint UNIQUE di database;
   /// jika terjadi bentrok (sangat jarang), coba lagi dengan kode baru.
@@ -44,6 +58,12 @@ class GroupService {
 
         return GroupModel.fromMap(data);
       } on PostgrestException catch (e) {
+        if (e.message.contains('GROUP_LIMIT_REACHED') ||
+            e.message.contains('row-level security')) {
+          throw Exception(
+            'Kamu sudah mencapai batas jumlah grup untuk paket langgananmu saat ini.',
+          );
+        }
         // 23505 = unique_violation (kode undangan sudah dipakai)
         if (e.code != '23505') rethrow;
         lastError = e;
@@ -62,14 +82,23 @@ class GroupService {
     final normalizedCode = inviteCode.trim().toUpperCase();
     if (normalizedCode.isEmpty) return null;
 
-    final result = await _supabase.rpc(
-      'join_group',
-      params: {'p_invite_code': normalizedCode},
-    );
+    try {
+      final result = await _supabase.rpc(
+        'join_group',
+        params: {'p_invite_code': normalizedCode},
+      );
 
-    final rows = (result as List?) ?? const [];
-    if (rows.isEmpty) return null;
-    return GroupModel.fromMap(Map<String, dynamic>.from(rows.first as Map));
+      final rows = (result as List?) ?? const [];
+      if (rows.isEmpty) return null;
+      return GroupModel.fromMap(Map<String, dynamic>.from(rows.first as Map));
+    } on PostgrestException catch (e) {
+      if (e.message.contains('GROUP_LIMIT_REACHED')) {
+        throw Exception(
+          'Kamu sudah mencapai batas jumlah grup untuk paket langgananmu saat ini.',
+        );
+      }
+      rethrow;
+    }
   }
 
   /// Keluar dari grup via RPC `leave_group`.
