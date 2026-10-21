@@ -19,6 +19,7 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  static const bool _enableFacebookLogin = false; // Disembunyikan sementara hingga Meta App ID dikonfigurasi resmi
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
@@ -361,12 +362,14 @@ class _LoginPageState extends State<LoginPage> {
                         icon: const Icon(Icons.g_mobiledata, color: Colors.blue, size: 28),
                         onPressed: _handleGoogleLogin,
                       ),
-                      const SizedBox(height: 16),
-                      SocialButton(
-                        text: 'Continue with Facebook',
-                        icon: const Icon(Icons.facebook, color: Colors.blueAccent, size: 24),
-                        onPressed: _handleFacebookLogin,
-                      ),
+                      if (_enableFacebookLogin) ...[
+                        const SizedBox(height: 16),
+                        SocialButton(
+                          text: 'Continue with Facebook',
+                          icon: const Icon(Icons.facebook, color: Colors.blueAccent, size: 24),
+                          onPressed: _handleFacebookLogin,
+                        ),
+                      ],
                       const SizedBox(height: 24),
                     ],
                   ),

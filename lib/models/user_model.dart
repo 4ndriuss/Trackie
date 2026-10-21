@@ -112,7 +112,7 @@ class UserModel {
       'email': email,
       'vehicle': vehicle,
       'phone': phone,
-      'birth_date': birthDate?.toIso8601String(),
+      'birth_date': birthDate?.toIso8601String().split('T').first,
       'avatar_url': photoUrl,
       'photoUrl': photoUrl,
       'plan': plan,
@@ -137,7 +137,7 @@ class UserModel {
       'email': email,
       'vehicle': vehicle,
       'phone': phone,
-      'birth_date': birthDate?.toIso8601String(),
+      'birth_date': birthDate?.toIso8601String().split('T').first,
       'avatar_url': photoUrl,
       'created_at': createdAt.toIso8601String(),
     };

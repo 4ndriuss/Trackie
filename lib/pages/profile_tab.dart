@@ -23,8 +23,6 @@ class ProfileTab extends StatefulWidget {
 }
 
 class _ProfileTabState extends State<ProfileTab> {
-  bool _isGhostMode = false;
-
   void _handleLogout(BuildContext context) {
     showDialog(
       context: context,
@@ -286,16 +284,33 @@ class _ProfileTabState extends State<ProfileTab> {
                       },
                     ),
                     const SizedBox(height: 12),
-                    ProfileMenuTile(
-                      icon: _isGhostMode ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                      title: 'Ghost Mode',
-                      badge: _isGhostMode ? 'ON' : 'OFF',
-                      onTap: () {
-                        setState(() => _isGhostMode = !_isGhostMode);
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(_isGhostMode ? 'Ghost Mode Activated' : 'Ghost Mode Deactivated'),
-                          ),
+                    Builder(
+                      builder: (context) {
+                        final locationProvider = context.watch<LocationProvider>();
+                        final isGhostMode = locationProvider.isGhostMode;
+                        return ProfileMenuTile(
+                          icon: isGhostMode
+                              ? Icons.visibility_off_outlined
+                              : Icons.visibility_outlined,
+                          title: 'Ghost Mode',
+                          badge: isGhostMode ? 'ON' : 'OFF',
+                          onTap: () async {
+                            final newMode = !isGhostMode;
+                            await context
+                                .read<LocationProvider>()
+                                .setGhostMode(newMode);
+                            if (!context.mounted) return;
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  newMode
+                                      ? 'Ghost Mode Aktif — Lokasi Anda disembunyikan dari peta grup'
+                                      : 'Ghost Mode Nonaktif — Lokasi Anda kembali dibagikan',
+                                ),
+                                duration: const Duration(seconds: 2),
+                              ),
+                            );
+                          },
                         );
                       },
                     ),

@@ -11,6 +11,8 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:permission_handler/permission_handler.dart';
+import '../services/permission_service.dart';
 import '../theme/app_theme.dart';
 import '../providers/auth_provider.dart';
 import '../providers/group_provider.dart';
@@ -275,25 +277,11 @@ class _MapPageState extends State<MapPage> {
     final currentUser = authProvider.user;
     if (activeGroup == null || currentUser == null) return;
 
-    final granted = await locationProvider.requestPermissions();
-    if (!mounted) return;
-    if (!granted) {
-      // Tetap muat rute dari tujuan grup meskipun izin GPS background belum diberikan penuh
-      await locationProvider.startTracking(
-        groupId: activeGroup.id,
-        uid: currentUser.uid,
-        userName:
-            authProvider.userProfile?.name ?? currentUser.displayName ?? 'Anda',
-        tripName: activeGroup.name,
-        initialDestination: activeGroup.destination,
-        vehicleType: activeGroup.type,
-      );
-      return;
-    }
-
     final displayName =
         authProvider.userProfile?.name ?? currentUser.displayName ?? 'Anda';
 
+    // Selalu pasang listener group_ended agar anggota otomatis keluar jika host menyelesaikan grup,
+    // bahkan jika izin GPS belum diberikan secara penuh.
     _groupEndedSubscription?.cancel();
     _groupEndedSubscription = locationProvider.onGroupEnded.listen((endedGroupId) async {
       if (!mounted) return;
@@ -302,6 +290,18 @@ class _MapPageState extends State<MapPage> {
         await _handleGroupEndedByHost();
       }
     });
+
+    final granted = await locationProvider.requestPermissions();
+    if (!mounted) return;
+
+    if (!granted) {
+      // Jika izin lokasi ditolak permanen, tampilkan dialog edukasi bantuan
+      final isPermanentlyDenied = await Permission.location.isPermanentlyDenied;
+      if (isPermanentlyDenied && mounted) {
+        await PermissionService.showPermissionDeniedDialog(context);
+      }
+      if (!mounted) return;
+    }
 
     await locationProvider.startTracking(
       groupId: activeGroup.id,

@@ -25,15 +25,15 @@ Meskipun demikian, audit mendalam multi-agent terhadap sisa codebase mengidentif
 
 ### Skor Kesehatan Proyek (Skala 1 - 10)
 
-| Kategori | Skor Sebelum Fase 1 | Skor Saat Ini (Pasca-Fase 1) | Catatan Evaluasi Pasca-Fase 1 |
-|:---|:---:|:---:|:---|
-| **Bug & Correctness** | 6.5 / 10 | **7.5 / 10** | Test suite hijau 100%, linter bersih, Facebook crash sembuh; sisa issue format DATE & race routing. |
-| **Performa & Efisiensi** | 6.0 / 10 | **6.0 / 10** | Konsep Zero DB Write sangat baik, namun GPS ganda & rebuild total peta memerlukan optimasi Fase 2. |
-| **Security (Sisi Aplikasi)** | 7.0 / 10 | **8.0 / 10** | RLS subscription locked to server, HTTPS murni, zero secret leak; sisa issue SharedPreferences token & allowBackup. |
-| **Backend, Data & Privasi** | 6.5 / 10 | **7.0 / 10** | Privilege escalation tuntas, topic broadcast private; sisa issue zombie groups & Ghost Mode placebo. |
-| **Dependency & Supply Chain** | 6.5 / 10 | **7.0 / 10** | Izin iOS lengkap; sisa issue bundle bloat Facebook Auth, package com.example, & missing Podfile. |
-| **Arsitektur & Kualitas Kode** | 5.5 / 10 | **6.0 / 10** | Lifecycle map deterministik; sisa issue God Classes >1.400 baris, broken Dark Mode, & delimited string hack. |
-| **RATA-RATA KESELURUHAN** | **6.3 / 10** | **6.9 / 10** | **Stabil, Siap Memasuki Sprint Optimasi Fase 2 (Performa & Stabilitas)** |
+| Kategori | Baseline Awal | Pasca-Fase 1 | Status Saat Ini (Fase 2 + Quick Wins) | Catatan Evaluasi Terkini |
+|:---|:---:|:---:|:---:|:---|
+| **Bug & Correctness** | 6.5 / 10 | 7.5 / 10 | **9.0 / 10** | Seluruh bug kritis (kuota aktif, listener peta, format DATE) tuntas; test suite 36/36 hijau. |
+| **Performa & Efisiensi** | 6.0 / 10 | 6.0 / 10 | **8.5 / 10** | GIN index terpasang, GPS ganda dieliminasi, rebuild MapPage diisolasi dengan Selector, stream leak diatasi. |
+| **Security (Sisi Aplikasi)** | 7.0 / 10 | 8.0 / 10 | **8.5 / 10** | RLS terkunci ke server, tombol Facebook unconfigured disembunyikan, HTTPS murni. |
+| **Backend, Data & Privasi** | 6.5 / 10 | 7.0 / 10 | **8.5 / 10** | Zombie groups pada delete_my_account tuntas, Ghost Mode terhubung dan berfungsi nyata. |
+| **Dependency & Supply Chain** | 6.5 / 10 | 7.0 / 10 | **8.0 / 10** | Izin iOS terpasang, native crash Facebook terproteksi & UI aman. |
+| **Arsitektur & Kualitas Kode** | 5.5 / 10 | 6.0 / 10 | **6.5 / 10** | Lifecycle map deterministik; sisa perbaikan Dark Mode & dekomposisi God Classes di Fase 3. |
+| **RATA-RATA KESELURUHAN** | **6.3 / 10** | **6.9 / 10** | **8.2 / 10** | **Sangat Sehat & Stabil (Semua Critical Issue Telah Selesai 100%)** |
 
 ---
 

@@ -20,13 +20,14 @@ class GroupService {
     return 'TRG-$code';
   }
 
-  /// Menghitung jumlah grup yang telah dibuat atau diikuti oleh user.
+  /// Menghitung jumlah grup aktif yang telah dibuat atau diikuti oleh user.
   Future<int> getUserGroupCount(String uid) async {
     try {
       final rows = await _supabase
           .from('groups')
           .select('id')
-          .contains('member_uids', [uid]);
+          .contains('member_uids', [uid])
+          .eq('status', 'active');
       return (rows as List).length;
     } catch (e) {
       debugPrint('Error getting user group count: $e');

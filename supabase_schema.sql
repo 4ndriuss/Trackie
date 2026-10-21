@@ -394,10 +394,19 @@ BEGIN
     RAISE EXCEPTION 'not authenticated';
   END IF;
 
+  -- 1. Akhiri semua grup aktif di mana user adalah host (mencegah zombie headless groups)
+  UPDATE public.groups
+     SET status = 'ended',
+         ended_at = now()
+   WHERE host_uid = v_uid
+     AND status = 'active';
+
+  -- 2. Keluarkan user dari daftar anggota di semua grup
   UPDATE public.groups
      SET member_uids = array_remove(member_uids, v_uid::text)
    WHERE v_uid::text = ANY (member_uids);
 
+  -- 3. Hapus data auth user (cascade ke public.profiles dan data terkait)
   DELETE FROM auth.users WHERE id = v_uid;
 END;
 $$;

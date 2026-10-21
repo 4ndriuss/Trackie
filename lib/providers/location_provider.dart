@@ -8,6 +8,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_background_service/flutter_background_service.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../services/location_service.dart';
 import '../services/background_location_service.dart';
@@ -56,6 +57,7 @@ class LocationProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   final List<LatLng> _recordedPath = [];
   DateTime? _tripStartedAt;
+  bool _isGhostMode = false;
 
   LocationProvider() {
     try {
@@ -63,8 +65,35 @@ class LocationProvider extends ChangeNotifier with WidgetsBindingObserver {
     } catch (e) {
       debugPrint('WidgetsBindingObserver init warning: $e');
     }
+    unawaited(_initGhostMode());
   }
 
+  Future<void> _initGhostMode() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      _isGhostMode = prefs.getBool('trackie_ghost_mode') ?? false;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error loading ghost mode: $e');
+    }
+  }
+
+  /// Aktifkan / Nonaktifkan Ghost Mode.
+  /// Saat Ghost Mode aktif, lokasi tidak disiarkan ke anggota grup (WebSocket broadcast dihentikan),
+  /// namun posisi tetap tampil di peta pribadi dan jejak tetap dicatat.
+  Future<void> setGhostMode(bool enabled) async {
+    _isGhostMode = enabled;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('trackie_ghost_mode', enabled);
+      BackgroundLocationService.setGhostMode(enabled);
+    } catch (e) {
+      debugPrint('Error saving ghost mode: $e');
+    }
+  }
+
+  bool get isGhostMode => _isGhostMode;
   List<MemberLocation> get members => _members;
   Position? get currentPosition => _currentPosition;
   bool get isTracking => _isTracking;
@@ -191,6 +220,7 @@ class LocationProvider extends ChangeNotifier with WidgetsBindingObserver {
           accessToken: SupabaseConfig.client.auth.currentSession?.accessToken,
           tripName: tripName,
           isForeground: true, // Timer periodik background dimatikan saat foreground
+          isGhostMode: _isGhostMode,
         );
         _startTokenSync();
       } catch (e) {
@@ -331,14 +361,16 @@ class LocationProvider extends ChangeNotifier with WidgetsBindingObserver {
           if (lastKnown != null && _currentPosition == null) {
             _currentPosition = lastKnown;
             _recordPoint(lastKnown.latitude, lastKnown.longitude);
-            await _locationService.updateLocation(
-              groupId: groupId,
-              uid: uid,
-              name: userName,
-              lat: lastKnown.latitude,
-              lng: lastKnown.longitude,
-              status: _currentMemberStatus,
-            );
+            if (!_isGhostMode) {
+              await _locationService.updateLocation(
+                groupId: groupId,
+                uid: uid,
+                name: userName,
+                lat: lastKnown.latitude,
+                lng: lastKnown.longitude,
+                status: _currentMemberStatus,
+              );
+            }
             _maybeRefreshRouteForCurrentPosition(forceIfFirstFix: true);
             notifyListeners();
           }
@@ -369,16 +401,18 @@ class LocationProvider extends ChangeNotifier with WidgetsBindingObserver {
         final isFirstFix = _currentPosition == null;
         _currentPosition = pos;
         _recordPoint(pos.latitude, pos.longitude);
-        unawaited(
-          _locationService.updateLocation(
-            groupId: groupId,
-            uid: uid,
-            name: userName,
-            lat: pos.latitude,
-            lng: pos.longitude,
-            status: _currentMemberStatus,
-          ),
-        );
+        if (!_isGhostMode) {
+          unawaited(
+            _locationService.updateLocation(
+              groupId: groupId,
+              uid: uid,
+              name: userName,
+              lat: pos.latitude,
+              lng: pos.longitude,
+              status: _currentMemberStatus,
+            ),
+          );
+        }
         _maybeRefreshRouteForCurrentPosition(forceIfFirstFix: isFirstFix);
         notifyListeners();
       },
@@ -674,14 +708,16 @@ class LocationProvider extends ChangeNotifier with WidgetsBindingObserver {
       final isFirstFix = _currentPosition == null;
       _currentPosition = pos;
       _recordPoint(pos.latitude, pos.longitude);
-      await _locationService.updateLocation(
-        groupId: groupId,
-        uid: uid,
-        name: name,
-        lat: pos.latitude,
-        lng: pos.longitude,
-        status: _currentMemberStatus,
-      );
+      if (!_isGhostMode) {
+        await _locationService.updateLocation(
+          groupId: groupId,
+          uid: uid,
+          name: name,
+          lat: pos.latitude,
+          lng: pos.longitude,
+          status: _currentMemberStatus,
+        );
+      }
       _maybeRefreshRouteForCurrentPosition(forceIfFirstFix: isFirstFix);
       notifyListeners();
     } catch (e) {
