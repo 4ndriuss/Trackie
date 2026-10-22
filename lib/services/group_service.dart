@@ -168,4 +168,32 @@ class GroupService {
         .eq('id', groupId)
         .map((list) => list.isNotEmpty ? GroupModel.fromMap(list.first) : null);
   }
+
+  /// Mengambil nama tampilan (beserta kendaraan jika ada) untuk daftar UID anggota grup
+  /// dari tabel `public.profiles`.
+  Future<Map<String, String>> getMemberNames(List<String> uids) async {
+    final cleanUids = uids.where((u) => u.trim().isNotEmpty).toSet().toList();
+    if (cleanUids.isEmpty) return {};
+    try {
+      final rows = await _supabase
+          .from('profiles')
+          .select('id, name, vehicle')
+          .inFilter('id', cleanUids);
+      final result = <String, String>{};
+      for (final row in (rows as List)) {
+        if (row is Map) {
+          final id = row['id']?.toString() ?? '';
+          final name = row['name']?.toString().trim() ?? '';
+          final vehicle = row['vehicle']?.toString().trim() ?? '';
+          if (id.isNotEmpty && name.isNotEmpty) {
+            result[id] = vehicle.isNotEmpty ? '$name ($vehicle)' : name;
+          }
+        }
+      }
+      return result;
+    } catch (e) {
+      debugPrint('Error fetching member names: $e');
+      return {};
+    }
+  }
 }

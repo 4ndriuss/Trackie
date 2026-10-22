@@ -139,6 +139,14 @@ class GroupProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Memperbarui daftar UID anggota pada grup aktif saat ada teman yang bergabung/keluar.
+  void updateActiveGroupMembers(List<String> memberUids) {
+    if (_activeGroup == null) return;
+    if (listEquals(_activeGroup!.memberUids, memberUids)) return;
+    _activeGroup = _activeGroup!.copyWith(memberUids: memberUids);
+    notifyListeners();
+  }
+
   // Clear error
   void clearError() {
     _error = null;

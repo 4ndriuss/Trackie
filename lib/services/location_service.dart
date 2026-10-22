@@ -23,13 +23,26 @@ class LocationService {
   SupabaseClient get _supabase => _injectedClient ?? SupabaseConfig.client;
 
   RealtimeChannel? _channel;
+  bool _isChannelSubscribed = false;
   String? _currentGroupId;
   String? _expectedHostUid;
+  String? _myUid;
   final Map<String, MemberLocation> _groupLocations = {};
+  final Set<String> _knownMemberUids = {};
   DestinationTarget? _groupDestination;
   StreamController<List<MemberLocation>>? _locationStreamController;
   StreamController<DestinationTarget?>? _destinationStreamController;
   StreamController<String>? _groupEndedStreamController;
+
+  /// Membungkus payload broadcast agar kompatibel dengan Supabase Realtime
+  /// Protocol v2 (`vsn=2.0.0`), Protocol v1 (`vsn=1.0.0`), maupun REST fallback.
+  static Map<String, dynamic> wrapBroadcastPayload(Map<String, dynamic> data) {
+    final copy = Map<String, dynamic>.from(data);
+    return <String, dynamic>{
+      ...copy,
+      'payload': Map<String, dynamic>.from(copy),
+    };
+  }
 
   /// Konfigurasikan UID Host grup yang diharapkan untuk memvalidasi
   /// broadcast resmi (seperti pembaruan destinasi atau grup diakhiri - BACK-03).
@@ -62,6 +75,8 @@ class LocationService {
         ? authenticatedUid
         : uid;
 
+    _myUid = effectiveUid;
+
     final location = MemberLocation(
       uid: effectiveUid,
       name: name,
@@ -79,10 +94,138 @@ class LocationService {
     try {
       await channel.sendBroadcastMessage(
         event: 'location_update',
-        payload: location.toMap(),
+        payload: wrapBroadcastPayload(location.toMap()),
       );
+      _trackMyPresence(location);
     } catch (e) {
       debugPrint('Error broadcasting location: $e');
+    }
+  }
+
+  void _trackMyPresence(MemberLocation location) {
+    final channel = _channel;
+    if (channel != null && _isChannelSubscribed) {
+      unawaited(
+        channel
+            .track(location.toMap())
+            .catchError((_) => ChannelResponse.error),
+      );
+    }
+  }
+
+  void _rebroadcastMyState() {
+    final channel = _channel;
+    if (channel == null) return;
+    final myUid = _supabase.auth.currentUser?.id ?? _myUid;
+    if (myUid != null && _groupLocations.containsKey(myUid)) {
+      final myLoc = _groupLocations[myUid]!;
+      unawaited(
+        channel
+            .sendBroadcastMessage(
+              event: 'location_update',
+              payload: wrapBroadcastPayload(myLoc.toMap()),
+            )
+            .catchError((_) => ChannelResponse.error),
+      );
+      _trackMyPresence(myLoc);
+    }
+    if (_groupDestination != null) {
+      unawaited(
+        channel
+            .sendBroadcastMessage(
+              event: 'destination_update',
+              payload: wrapBroadcastPayload(_destinationPayload(_groupDestination!)),
+            )
+            .catchError((_) => ChannelResponse.error),
+      );
+    }
+  }
+
+  /// Sinkronkan daftar anggota grup dari tabel `public.groups` (`member_uids`) dan `public.profiles`
+  /// agar teman yang baru join langsung muncul di peta & daftar anggota, serta memicu pertukaran koordinat.
+  void syncRegisteredMembers({
+    required String groupId,
+    required List<String> memberUids,
+    required Map<String, String> memberNames,
+    required double fallbackLat,
+    required double fallbackLng,
+    String? currentUid,
+  }) {
+    _ensureChannel(groupId);
+    final effectiveMyUid = _supabase.auth.currentUser?.id ?? currentUid ?? _myUid;
+    final cleanUids = memberUids.where((u) => u.trim().isNotEmpty).toSet();
+    if (effectiveMyUid != null && effectiveMyUid.isNotEmpty) {
+      cleanUids.add(effectiveMyUid);
+    }
+
+    bool changed = false;
+    bool hasNewPeer = false;
+
+    // Hapus anggota yang sudah keluar dari grup
+    final toRemove = _groupLocations.keys
+        .where((k) => !cleanUids.contains(k) && k != effectiveMyUid)
+        .toList();
+    for (final uid in toRemove) {
+      _groupLocations.remove(uid);
+      changed = true;
+    }
+
+    for (final uid in cleanUids) {
+      if (!_knownMemberUids.contains(uid) && uid != effectiveMyUid) {
+        hasNewPeer = true;
+      }
+      final profileName = memberNames[uid]?.trim();
+      final existing = _groupLocations[uid];
+      if (existing == null) {
+        // Tambahkan entry awal agar ikon teman langsung muncul saat join grup
+        _groupLocations[uid] = MemberLocation(
+          uid: uid,
+          name: (profileName != null && profileName.isNotEmpty)
+              ? profileName
+              : (uid == effectiveMyUid ? 'Anda' : 'Anggota Grup'),
+          lat: fallbackLat,
+          lng: fallbackLng,
+          timestamp: 0,
+          status: 'online',
+        );
+        changed = true;
+      } else if (profileName != null &&
+          profileName.isNotEmpty &&
+          (existing.name.isEmpty ||
+              existing.name == 'Anggota Grup' ||
+              existing.name == 'Teman Grup')) {
+        _groupLocations[uid] = existing.copyWith(name: profileName);
+        changed = true;
+      }
+    }
+
+    _knownMemberUids
+      ..clear()
+      ..addAll(cleanUids);
+
+    if (changed) {
+      _emitLocations();
+    }
+
+    if (hasNewPeer) {
+      resyncWithPeers();
+    }
+  }
+
+  /// Meminta sinkronisasi ulang lokasi dengan seluruh anggota di channel.
+  void resyncWithPeers() {
+    _rebroadcastMyState();
+    final myUid = _supabase.auth.currentUser?.id ?? _myUid;
+    final channel = _channel;
+    if (channel != null) {
+      unawaited(
+        channel
+            .sendBroadcastMessage(
+              event: 'request_sync',
+              payload: wrapBroadcastPayload({'from': myUid ?? ''}),
+            )
+            .catchError((_) => ChannelResponse.error),
+      );
     }
   }
 
@@ -116,7 +259,7 @@ class LocationService {
     try {
       await channel.sendBroadcastMessage(
         event: 'destination_update',
-        payload: _destinationPayload(target, effectiveHostUid),
+        payload: wrapBroadcastPayload(_destinationPayload(target, effectiveHostUid)),
       );
     } catch (e) {
       debugPrint('Error broadcasting destination: $e');
@@ -169,15 +312,18 @@ class LocationService {
   }
 
   void _setupChannel(String groupId) {
+    _isChannelSubscribed = false;
     _channel?.unsubscribe();
     _currentGroupId = groupId;
 
-    // Private channel: akses diotorisasi oleh RLS di `realtime.messages`
-    // (lihat supabase_schema.sql bagian 9) sehingga hanya anggota grup yang
-    // bisa mendengarkan/mengirim lokasi.
+    final presenceKey = _supabase.auth.currentUser?.id ?? _myUid ?? '';
+
     _channel = _supabase.channel(
       trackingTopic(groupId),
-      opts: const RealtimeChannelConfig(private: true),
+      opts: RealtimeChannelConfig(
+        ack: true,
+        key: presenceKey,
+      ),
     );
 
     _channel!
@@ -251,21 +397,8 @@ class LocationService {
         .onBroadcast(
           event: 'request_sync',
           callback: (payload) {
-            // Ketika member baru minta sync, broadcast ulang lokasi diri sendiri jika ada
-            final myUid = _supabase.auth.currentUser?.id;
-            if (myUid != null && _groupLocations.containsKey(myUid)) {
-              _channel?.sendBroadcastMessage(
-                event: 'location_update',
-                payload: _groupLocations[myUid]!.toMap(),
-              );
-            }
-            // Broadcast ulang juga titik tujuan terkini jika sudah ada
-            if (_groupDestination != null) {
-              _channel?.sendBroadcastMessage(
-                event: 'destination_update',
-                payload: _destinationPayload(_groupDestination!),
-              );
-            }
+            // Ketika member baru minta sync, broadcast ulang lokasi & tujuan diri sendiri jika ada
+            _rebroadcastMyState();
           },
         )
         .onBroadcast(
@@ -291,38 +424,66 @@ class LocationService {
             }
           },
         )
+        .onPresenceSync((_) {
+          _syncFromPresence();
+        })
+        .onPresenceJoin((_) {
+          _syncFromPresence();
+          // Saat teman baru join ke channel, langsung kirim lokasi & tujuan terkini kita
+          _rebroadcastMyState();
+        })
         .subscribe((status, error) {
-      if (status == RealtimeSubscribeStatus.subscribed) {
-        final myUid = _supabase.auth.currentUser?.id;
-        // Jika posisi awal kita sudah diambil sebelum channel selesai subscribe, kirim sekarang
-        if (myUid != null && _groupLocations.containsKey(myUid)) {
-          _channel?.sendBroadcastMessage(
-            event: 'location_update',
-            payload: _groupLocations[myUid]!.toMap(),
-          );
-        }
-        if (_groupDestination != null) {
-          _channel?.sendBroadcastMessage(
-            event: 'destination_update',
-            payload: _destinationPayload(_groupDestination!),
-          );
-        }
+      _isChannelSubscribed = status == RealtimeSubscribeStatus.subscribed;
+      if (_isChannelSubscribed) {
+        _rebroadcastMyState();
+        final myUid = _supabase.auth.currentUser?.id ?? _myUid;
         // Minta anggota lain untuk mengirim koordinat & tujuan mereka
         _channel?.sendBroadcastMessage(
           event: 'request_sync',
-          payload: {'from': myUid},
+          payload: wrapBroadcastPayload({'from': myUid ?? ''}),
         );
       }
     });
   }
 
+  void _syncFromPresence() {
+    final channel = _channel;
+    if (channel == null) return;
+    try {
+      bool changed = false;
+      for (final state in channel.presenceState()) {
+        for (final presence in state.presences) {
+          final data = _unwrap(presence.payload) ?? presence.payload;
+          final loc = MemberLocation.fromMap(data);
+          if (_isValidLocation(loc)) {
+            final existing = _groupLocations[loc.uid];
+            if (existing == null || loc.timestamp >= existing.timestamp) {
+              _groupLocations[loc.uid] = loc;
+              changed = true;
+            }
+          }
+        }
+      }
+      if (changed) {
+        _emitLocations();
+      }
+    } catch (e) {
+      debugPrint('Error syncing presence locations: $e');
+    }
+  }
+
   static const Set<String> _allowedStatuses = {'online', 'offline', 'sos'};
 
-  /// Callback `onBroadcast` menerima amplop `{type, event, payload}`.
-  /// Data sebenarnya berada di dalam key `payload`.
+  /// Membuka amplop pesan broadcast baik dari format nested `payload` (Protocol v2 / REST)
+  /// maupun format flat map (Protocol v1).
   Map<String, dynamic>? _unwrap(Map<String, dynamic> message) {
-    final inner = message['payload'];
-    if (inner is Map) return Map<String, dynamic>.from(inner);
+    Map<String, dynamic> current = Map<String, dynamic>.from(message);
+    while (current['payload'] is Map) {
+      current = Map<String, dynamic>.from(current['payload'] as Map);
+    }
+    if (current.isNotEmpty) {
+      return current;
+    }
     return null;
   }
 
@@ -378,17 +539,18 @@ class LocationService {
       _groupLocations[effectiveUid] =
           _groupLocations[effectiveUid]!.copyWith(status: 'offline');
       _emitLocations();
+      _trackMyPresence(_groupLocations[effectiveUid]!);
     }
 
     final channel = _ensureChannel(groupId);
     try {
       await channel.sendBroadcastMessage(
         event: 'status_update',
-        payload: {
+        payload: wrapBroadcastPayload({
           'uid': effectiveUid,
           'status': 'offline',
           'timestamp': DateTime.now().millisecondsSinceEpoch,
-        },
+        }),
       );
     } catch (e) {
       debugPrint('Error broadcasting offline status: $e');
@@ -407,10 +569,13 @@ class LocationService {
   /// Bersihkan channel dan data grup saat grup berakhir.
   Future<void> cleanupGroupLocations(String groupId) async {
     _groupLocations.clear();
+    _knownMemberUids.clear();
     _groupDestination = null;
     _expectedHostUid = null;
+    _myUid = null;
     _emitLocations();
     _emitDestination();
+    _isChannelSubscribed = false;
     _channel?.unsubscribe();
     _channel = null;
     _currentGroupId = null;
@@ -433,7 +598,7 @@ class LocationService {
     try {
       await channel.sendBroadcastMessage(
         event: 'group_ended',
-        payload: payload,
+        payload: wrapBroadcastPayload(payload),
       );
     } catch (e) {
       debugPrint('Error broadcasting group_ended: $e');
@@ -455,17 +620,18 @@ class LocationService {
       _groupLocations[effectiveUid] =
           _groupLocations[effectiveUid]!.copyWith(status: 'sos');
       _emitLocations();
+      _trackMyPresence(_groupLocations[effectiveUid]!);
     }
 
     final channel = _ensureChannel(groupId);
     try {
       await channel.sendBroadcastMessage(
         event: 'status_update',
-        payload: {
+        payload: wrapBroadcastPayload({
           'uid': effectiveUid,
           'status': 'sos',
           'timestamp': DateTime.now().millisecondsSinceEpoch,
-        },
+        }),
       );
     } catch (e) {
       debugPrint('Error broadcasting SOS: $e');
@@ -487,17 +653,18 @@ class LocationService {
       _groupLocations[effectiveUid] =
           _groupLocations[effectiveUid]!.copyWith(status: 'online');
       _emitLocations();
+      _trackMyPresence(_groupLocations[effectiveUid]!);
     }
 
     final channel = _ensureChannel(groupId);
     try {
       await channel.sendBroadcastMessage(
         event: 'status_update',
-        payload: {
+        payload: wrapBroadcastPayload({
           'uid': effectiveUid,
           'status': 'online',
           'timestamp': DateTime.now().millisecondsSinceEpoch,
-        },
+        }),
       );
     } catch (e) {
       debugPrint('Error broadcasting cancel SOS: $e');
