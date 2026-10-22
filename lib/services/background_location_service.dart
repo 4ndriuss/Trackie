@@ -218,7 +218,7 @@ Future<void> _onStart(ServiceInstance service) async {
       if (!isGhostMode && trackingChannel != null) {
         await trackingChannel?.sendBroadcastMessage(
           event: 'location_update',
-          payload: payload,
+          payload: LocationService.wrapBroadcastPayload(payload),
         );
       }
 
@@ -311,17 +311,14 @@ Future<void> _onStart(ServiceInstance service) async {
       await trackingChannel?.unsubscribe();
       trackingChannel = null;
 
-      if (accessToken == null) {
-        // Private channel menolak koneksi anonim.
-        debugPrint('Background tracking skipped: no access token');
-      } else {
+      if (accessToken != null) {
         await supabase.realtime.setAuth(accessToken);
-        trackingChannel = supabase.channel(
-          LocationService.trackingTopic(groupId!),
-          opts: const RealtimeChannelConfig(private: true),
-        );
-        trackingChannel?.subscribe();
       }
+      trackingChannel = supabase.channel(
+        LocationService.trackingTopic(groupId!),
+        opts: const RealtimeChannelConfig(ack: true),
+      );
+      trackingChannel?.subscribe();
     }
 
     if (!isTimerPaused) {
@@ -342,11 +339,11 @@ Future<void> _onStart(ServiceInstance service) async {
       try {
         await trackingChannel?.sendBroadcastMessage(
           event: 'status_update',
-          payload: {
+          payload: LocationService.wrapBroadcastPayload({
             'uid': uid,
             'status': 'offline',
             'timestamp': DateTime.now().millisecondsSinceEpoch,
-          },
+          }),
         );
         await trackingChannel?.unsubscribe();
         trackingChannel = null;

@@ -13,25 +13,29 @@ class PermissionService {
   /// Minta izin lokasi dasar (foreground / "While Using").
   /// Mengembalikan true jika izin diberikan.
   static Future<bool> requestLocationPermission() async {
-    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      return false;
-    }
-
-    var permission = await Geolocator.checkPermission();
-
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) {
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
         return false;
       }
-    }
 
-    if (permission == LocationPermission.deniedForever) {
+      var permission = await Geolocator.checkPermission();
+
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          return false;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        return false;
+      }
+
+      return true;
+    } catch (_) {
       return false;
     }
-
-    return true;
   }
 
   /// Minta izin lokasi background ("Always Allow").
@@ -67,10 +71,9 @@ class PermissionService {
     final locationGranted = await requestLocationPermission();
     if (!locationGranted) return false;
 
-    // 2. Izin notifikasi & background (opsional untuk foreground service di Android/iOS)
+    // 2. Izin notifikasi (opsional untuk foreground service di Android/iOS)
     if (!kIsWeb) {
       await requestNotificationPermission();
-      await requestBackgroundLocationPermission();
     }
 
     return true;

@@ -3,6 +3,7 @@
 // beserta rute jalan raya, estimasi waktu tiba (ETA), dan petunjuk arah belokan
 // ala Google Maps menggunakan OpenStreetMap (flutter_map + OSRM + Nominatim).
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -177,6 +178,8 @@ class _MapPageState extends State<MapPage> {
   final MapController _mapController = MapController();
   final RoutingService _routingService = RoutingService();
   LocationProvider? _locationProviderRef;
+  final Set<String> _knownPeerIds = {};
+  String? _myUid;
   bool _hasCenteredOnRealLocation = false;
   bool _hasFittedInitialRoute = false;
   bool _isPickingDestinationOnMap = false;
@@ -189,6 +192,7 @@ class _MapPageState extends State<MapPage> {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      _myUid = context.read<AuthProvider>().user?.uid;
       _locationProviderRef = context.read<LocationProvider>();
       _locationProviderRef?.addListener(_handleCameraInitialSetup);
       _initRealTimeTracking();
@@ -211,8 +215,27 @@ class _MapPageState extends State<MapPage> {
         _fitRouteBounds(route);
       }
     }
-    if (_hasCenteredOnRealLocation && _hasFittedInitialRoute) {
-      _locationProviderRef?.removeListener(_handleCameraInitialSetup);
+
+    // Deteksi teman baru yang bergabung ke grup agar langsung diberitahukan & terlihat di peta
+    final liveMembers = _locationProviderRef!.members;
+    String? newlyJoinedFriendName;
+    for (final m in liveMembers) {
+      if (m.uid.isNotEmpty && m.uid != _myUid && !_knownPeerIds.contains(m.uid)) {
+        _knownPeerIds.add(m.uid);
+        newlyJoinedFriendName = m.name;
+      }
+    }
+    if (newlyJoinedFriendName != null && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('👋 $newlyJoinedFriendName muncul di peta grup!'),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
+        ),
+      );
+      if (_locationProviderRef!.activeRoute == null) {
+        _fitAllMembersBounds();
+      }
     }
   }
 
@@ -251,12 +274,15 @@ class _MapPageState extends State<MapPage> {
     final granted = await locationProvider.requestPermissions();
     if (!mounted) return;
 
-    if (!granted) {
+    if (!granted && !kIsWeb) {
       // Jika izin lokasi ditolak permanen, tampilkan dialog edukasi bantuan
-      final isPermanentlyDenied = await Permission.location.isPermanentlyDenied;
-      if (isPermanentlyDenied && mounted) {
-        await PermissionService.showPermissionDeniedDialog(context);
-      }
+      try {
+        final isPermanentlyDenied =
+            await Permission.location.isPermanentlyDenied;
+        if (isPermanentlyDenied && mounted) {
+          await PermissionService.showPermissionDeniedDialog(context);
+        }
+      } catch (_) {}
       if (!mounted) return;
     }
 
@@ -268,6 +294,7 @@ class _MapPageState extends State<MapPage> {
       initialDestination: activeGroup.destination,
       vehicleType: activeGroup.type,
       hostUid: activeGroup.hostUid,
+      initialMemberUids: activeGroup.memberUids,
     );
   }
 
@@ -276,6 +303,12 @@ class _MapPageState extends State<MapPage> {
     String? currentUid,
   ) {
     final liveMembers = locationProvider.members;
+    final rawSelfName = locationProvider.currentUserName?.trim();
+    final selfLabel = (rawSelfName != null &&
+            rawSelfName.isNotEmpty &&
+            rawSelfName != 'Anda')
+        ? '$rawSelfName (Anda)'
+        : 'Anda';
 
     double? myLat = locationProvider.currentPosition?.latitude;
     double? myLng = locationProvider.currentPosition?.longitude;
@@ -283,29 +316,32 @@ class _MapPageState extends State<MapPage> {
     if (currentUid != null) {
       for (final m in liveMembers) {
         if (m.uid == currentUid) {
-          myLat = m.lat;
-          myLng = m.lng;
+          myLat ??= m.lat;
+          myLng ??= m.lng;
           break;
         }
       }
     }
 
+    final effectiveMyLat = myLat ?? _initialCenter.latitude;
+    final effectiveMyLng = myLng ?? _initialCenter.longitude;
+
     if (liveMembers.isEmpty) {
-      if (myLat != null && myLng != null) {
-        return [
-          GroupMember(
-            id: currentUid ?? 'anda',
-            name: 'Anda',
-            status: MemberStatus.online,
-            position: LatLng(myLat, myLng),
-            distanceMeters: 0,
-          ),
-        ];
-      }
-      return const [];
+      return [
+        GroupMember(
+          id: currentUid ?? 'anda',
+          name: selfLabel,
+          status: MemberStatus.online,
+          position: LatLng(effectiveMyLat, effectiveMyLng),
+          distanceMeters: 0,
+        ),
+      ];
     }
 
-    return liveMembers.map((loc) {
+    final resolved = <GroupMember>[];
+    bool hasSelf = false;
+
+    for (final loc in liveMembers) {
       final MemberStatus status;
       if (loc.isSos) {
         status = MemberStatus.sos;
@@ -315,28 +351,173 @@ class _MapPageState extends State<MapPage> {
         status = MemberStatus.online;
       }
 
-      final double distance =
-          (myLat != null && myLng != null && loc.uid != currentUid)
-              ? HaversineUtils.distanceInMeters(myLat, myLng, loc.lat, loc.lng)
-              : 0.0;
+      final isMe = currentUid != null && loc.uid == currentUid;
+      if (isMe) {
+        hasSelf = true;
+      }
 
-      return GroupMember(
+      final posLat = isMe ? (myLat ?? loc.lat) : loc.lat;
+      final posLng = isMe ? (myLng ?? loc.lng) : loc.lng;
+
+      final double distance = !isMe
+          ? HaversineUtils.distanceInMeters(
+              effectiveMyLat,
+              effectiveMyLng,
+              posLat,
+              posLng,
+            )
+          : 0.0;
+
+      final member = GroupMember(
         id: loc.uid,
-        name: loc.uid == currentUid ? '${loc.name} (Anda)' : loc.name,
+        name: isMe
+            ? (loc.name.endsWith('(Anda)') ? loc.name : '${loc.name} (Anda)')
+            : loc.name,
         status: status,
-        position: LatLng(loc.lat, loc.lng),
+        position: LatLng(posLat, posLng),
         distanceMeters: distance,
       );
-    }).toList();
+
+      if (isMe) {
+        resolved.insert(0, member);
+      } else {
+        resolved.add(member);
+      }
+    }
+
+    // Pastikan ikon pengguna sendiri selalu muncul meskipun belum masuk ke liveMembers (mis. Ghost Mode)
+    if (!hasSelf) {
+      resolved.insert(
+        0,
+        GroupMember(
+          id: currentUid ?? 'anda',
+          name: selfLabel,
+          status: MemberStatus.online,
+          position: LatLng(effectiveMyLat, effectiveMyLng),
+          distanceMeters: 0,
+        ),
+      );
+    }
+
+    return resolved;
   }
 
   /// Mengubah list [members] dan titik tujuan menjadi kumpulan [Marker].
+  /// Jika ada 2 atau lebih anggota di titik koordinat yang sama persis (< 20m),
+  /// beri sedikit offset melingkar agar ikon pengguna dan ikon teman tidak saling menutupi.
   static List<Marker> _buildMarkers(
     List<GroupMember> members,
     DestinationTarget? destinationTarget,
     void Function(GroupMember) onFocusMember,
     void Function(LatLng) onFocusDestination,
   ) {
+    final memberMarkers = <Marker>[];
+    for (int i = 0; i < members.length; i++) {
+      final m = members[i];
+      int overlapIndex = 0;
+      for (int j = 0; j < i; j++) {
+        final prev = members[j];
+        final dist = HaversineUtils.distanceInMeters(
+          prev.position.latitude,
+          prev.position.longitude,
+          m.position.latitude,
+          m.position.longitude,
+        );
+        if (dist < 20.0) {
+          overlapIndex++;
+        }
+      }
+
+      final LatLng displayPoint;
+      if (overlapIndex > 0) {
+        final angle = overlapIndex * (math.pi / 3);
+        displayPoint = LatLng(
+          m.position.latitude + 0.00032 * math.sin(angle),
+          m.position.longitude + 0.00032 * math.cos(angle),
+        );
+      } else {
+        displayPoint = m.position;
+      }
+
+      final isSelf =
+          m.id == 'anda' || m.name == 'Anda' || m.name.endsWith('(Anda)');
+
+      memberMarkers.add(
+        Marker(
+          key: ValueKey(m.id),
+          point: displayPoint,
+          width: 130,
+          height: 74,
+          alignment: Alignment.topCenter,
+          child: Opacity(
+            opacity: m.isOnline ? 1.0 : 0.65,
+            child: GestureDetector(
+              onTap: () => onFocusMember(m),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 2.5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: m.isSos
+                          ? Colors.red.shade700
+                          : (isSelf
+                              ? AppTheme.primary
+                              : Colors.black.withValues(alpha: 0.78)),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      m.isSos ? '🚨 ${m.name}' : m.name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: m.isSos
+                          ? Colors.red
+                          : (isSelf
+                              ? AppTheme.primary
+                              : (m.isOnline ? Colors.green : Colors.orange)),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2.5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.25),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Icon(
+                      m.isSos
+                          ? Icons.warning_amber_rounded
+                          : (isSelf
+                              ? Icons.person_pin_circle_rounded
+                              : Icons.navigation),
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return [
       if (destinationTarget != null)
         Marker(
@@ -403,72 +584,40 @@ class _MapPageState extends State<MapPage> {
             ),
           ),
         ),
-      for (final m in members)
-        Marker(
-          key: ValueKey(m.id),
-          point: m.position,
-          width: 120,
-          height: 72,
-          alignment: Alignment.topCenter,
-          child: Opacity(
-            opacity: m.isOnline ? 1.0 : 0.55,
-            child: GestureDetector(
-              onTap: () => onFocusMember(m),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: m.isSos
-                          ? Colors.red.shade700
-                          : Colors.black.withValues(alpha: 0.75),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      m.isSos ? '🚨 ${m.name}' : m.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Container(
-                    width: 36,
-                    height: 36,
-                    decoration: BoxDecoration(
-                      color: m.isSos
-                          ? Colors.red
-                          : (m.isOnline ? Colors.green : Colors.orange),
-                      shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2.5),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withValues(alpha: 0.25),
-                          blurRadius: 6,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Icon(
-                      m.isSos ? Icons.warning_amber_rounded : Icons.navigation,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
+      ...memberMarkers,
     ];
+  }
+
+  /// Mengarahkan kamera peta agar seluruh anggota grup terlihat di layar.
+  void _fitAllMembersBounds() {
+    if (!mounted || _locationProviderRef == null) return;
+    final members = _resolveMembers(_locationProviderRef!, _myUid);
+    if (members.isEmpty) return;
+    if (members.length == 1) {
+      _mapController.move(members.first.position, 15.0);
+      return;
+    }
+    final points = members.map((m) => m.position).toList();
+    final first = points.first;
+    final hasDistinctPoint = points.any(
+      (p) =>
+          (p.latitude - first.latitude).abs() > 0.0002 ||
+          (p.longitude - first.longitude).abs() > 0.0002,
+    );
+    if (!hasDistinctPoint) {
+      _mapController.move(first, 16.0);
+      return;
+    }
+    try {
+      _mapController.fitCamera(
+        CameraFit.bounds(
+          bounds: LatLngBounds.fromPoints(points),
+          padding: const EdgeInsets.fromLTRB(56, 160, 56, 260),
+        ),
+      );
+    } catch (e) {
+      debugPrint('Error fitting members bounds: $e');
+    }
   }
 
   /// Mengarahkan kamera peta untuk fokus ke posisi anggota tertentu.
@@ -1126,16 +1275,30 @@ class _MapPageState extends State<MapPage> {
                           top: 12,
                           right: AppSpacing.md,
                         ),
-                        child: FloatingActionButton(
-                          heroTag: 'btn_sos',
-                          tooltip: 'Sinyal Darurat (SOS)',
-                          onPressed: _triggerSOS,
-                          backgroundColor: theme.colorScheme.error,
-                          foregroundColor: Colors.white,
-                          child: const Icon(
-                            Icons.warning_amber_rounded,
-                            size: 26,
-                          ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            FloatingActionButton(
+                              heroTag: 'btn_sos',
+                              tooltip: 'Sinyal Darurat (SOS)',
+                              onPressed: _triggerSOS,
+                              backgroundColor: theme.colorScheme.error,
+                              foregroundColor: Colors.white,
+                              child: const Icon(
+                                Icons.warning_amber_rounded,
+                                size: 26,
+                              ),
+                            ),
+                            const SizedBox(height: 10),
+                            FloatingActionButton.small(
+                              heroTag: 'btn_fit_members',
+                              tooltip: 'Lihat Semua Anggota',
+                              onPressed: _fitAllMembersBounds,
+                              backgroundColor: theme.colorScheme.surface,
+                              foregroundColor: AppTheme.primary,
+                              child: const Icon(Icons.groups_rounded),
+                            ),
+                          ],
                         ),
                       ),
                     ],

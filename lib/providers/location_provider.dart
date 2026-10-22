@@ -16,6 +16,7 @@ import '../services/permission_service.dart';
 import '../services/routing_service.dart';
 import '../services/haversine_utils.dart';
 import '../services/trip_service.dart';
+import '../services/group_service.dart';
 import '../models/location_model.dart';
 import '../models/trip_history_model.dart';
 import '../models/group_model.dart';
@@ -30,16 +31,23 @@ import '../supabase_config.dart';
 /// - Background tracking via Foreground Service saat aplikasi di latar belakang
 /// - Permission handling untuk lokasi
 class LocationProvider extends ChangeNotifier with WidgetsBindingObserver {
+  static const double _defaultFallbackLat = -6.200000;
+  static const double _defaultFallbackLng = 106.816666;
+
   final LocationService _locationService = LocationService();
   final RoutingService _routingService = RoutingService();
+  final GroupService _groupService = GroupService();
 
   List<MemberLocation> _members = [];
   StreamSubscription? _locationSubscription;
   StreamSubscription<DestinationTarget?>? _destinationSubscription;
+  StreamSubscription<GroupModel?>? _groupSubscription;
   StreamSubscription<Position>? _positionStreamSubscription;
   StreamSubscription<AuthState>? _authSubscription;
   StreamSubscription? _backgroundPositionSubscription;
   Timer? _tokenRefreshTimer;
+  Timer? _foregroundSyncTimer;
+  final Map<String, String> _memberNamesCache = {};
   Position? _currentPosition;
   bool _isTracking = false;
   bool _permissionsGranted = false;
@@ -101,6 +109,7 @@ class LocationProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool get isGhostMode => _isGhostMode;
   List<MemberLocation> get members => _members;
   Position? get currentPosition => _currentPosition;
+  String? get currentUserName => _currentUserName;
   bool get isTracking => _isTracking;
   bool get permissionsGranted => _permissionsGranted;
   String? get error => _error;
@@ -127,6 +136,7 @@ class LocationProvider extends ChangeNotifier with WidgetsBindingObserver {
     String? initialDestination,
     String vehicleType = 'motor',
     String? hostUid,
+    List<String>? initialMemberUids,
   }) async {
     stopListening();
     _locationService.setExpectedHostUid(hostUid);
@@ -134,6 +144,7 @@ class LocationProvider extends ChangeNotifier with WidgetsBindingObserver {
     _currentGroupId = groupId;
     _currentUid = uid;
     _currentUserName = userName;
+    _memberNamesCache[uid] = userName;
     _vehicleType = vehicleType;
     _currentMemberStatus = 'online';
     _tripStartedAt = DateTime.now();
@@ -182,6 +193,31 @@ class LocationProvider extends ChangeNotifier with WidgetsBindingObserver {
       debugPrint('Error streaming locations: $e');
       notifyListeners();
     });
+
+    // Seed ikon & posisi awal pengguna sendiri seketika agar langsung tampil di peta
+    // dan langsung dibagikan via Presence/Broadcast bahkan saat GPS sedang mencari sinyal.
+    final seedLat = _currentPosition?.latitude ?? _defaultFallbackLat;
+    final seedLng = _currentPosition?.longitude ?? _defaultFallbackLng;
+    if (!_isGhostMode) {
+      unawaited(
+        _locationService.updateLocation(
+          groupId: groupId,
+          uid: uid,
+          name: userName,
+          lat: seedLat,
+          lng: seedLng,
+          status: _currentMemberStatus,
+        ),
+      );
+    }
+
+    // Sinkronkan daftar anggota grup dari database (public.groups & public.profiles)
+    // agar teman yang baru bergabung langsung terdeteksi dan muncul di peta.
+    _startGroupMembersSync(
+      groupId: groupId,
+      currentUid: uid,
+      initialMemberUids: initialMemberUids,
+    );
 
     // 2. Listen perubahan titik tujuan dari Host secara real-time
     _destinationSubscription = _locationService
@@ -768,6 +804,10 @@ class LocationProvider extends ChangeNotifier with WidgetsBindingObserver {
     _isTracking = false;
     _currentGroupId = null;
     _currentUserName = null;
+    _foregroundSyncTimer?.cancel();
+    _foregroundSyncTimer = null;
+    _groupSubscription?.cancel();
+    _groupSubscription = null;
     _backgroundPositionSubscription?.cancel();
     _backgroundPositionSubscription = null;
     _positionStreamSubscription?.cancel();
@@ -788,6 +828,135 @@ class LocationProvider extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  /// Menjalankan sinkronisasi daftar anggota dari `public.groups` & `public.profiles`
+  /// serta heartbeat koordinat periodik agar perangkat yang sedang diam (stationary)
+  /// tetap menyiarkan posisi ke teman yang baru bergabung.
+  void _startGroupMembersSync({
+    required String groupId,
+    required String currentUid,
+    List<String>? initialMemberUids,
+  }) {
+    _groupSubscription?.cancel();
+    _foregroundSyncTimer?.cancel();
+
+    if (initialMemberUids != null && initialMemberUids.isNotEmpty) {
+      unawaited(
+        _syncMemberListAndNames(
+          groupId: groupId,
+          memberUids: initialMemberUids,
+        ),
+      );
+    } else {
+      unawaited(_syncGroupFromDb(groupId));
+    }
+
+    try {
+      _groupSubscription = _groupService.streamGroup(groupId).listen(
+        (group) {
+          if (group != null && _isTracking && _currentGroupId == groupId) {
+            unawaited(_handleGroupModelUpdate(group));
+          }
+        },
+        onError: (e) {
+          debugPrint('Group realtime stream warning: $e');
+        },
+      );
+    } catch (e) {
+      debugPrint('Failed to subscribe group stream: $e');
+    }
+
+    _foregroundSyncTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
+      if (!_isTracking || !_isAppInForeground || _currentGroupId != groupId) {
+        return;
+      }
+      await _syncGroupFromDb(groupId);
+
+      // Heartbeat koordinat saat perangkat diam agar teman yang baru join selalu
+      // menerima posisi terbaru kita.
+      final uid = _currentUid;
+      final name = _currentUserName;
+      if (!_isGhostMode && uid != null && name != null) {
+        final lat = _currentPosition?.latitude ?? _defaultFallbackLat;
+        final lng = _currentPosition?.longitude ?? _defaultFallbackLng;
+        await _locationService.updateLocation(
+          groupId: groupId,
+          uid: uid,
+          name: name,
+          lat: lat,
+          lng: lng,
+          status: _currentMemberStatus,
+        );
+      }
+    });
+  }
+
+  Future<void> _syncGroupFromDb(String groupId) async {
+    try {
+      final group = await _groupService.getGroup(groupId);
+      if (group == null || !_isTracking || _currentGroupId != groupId) return;
+      await _handleGroupModelUpdate(group);
+    } catch (e) {
+      debugPrint('Error syncing group from DB: $e');
+    }
+  }
+
+  Future<void> _handleGroupModelUpdate(GroupModel group) async {
+    if (group.destination.trim().isNotEmpty) {
+      final embedded = RoutingService.tryParseEmbeddedDestination(
+        group.destination,
+      );
+      if (embedded != null &&
+          (_destinationTarget?.point != embedded.point ||
+              _destinationTarget?.name != embedded.name)) {
+        _destinationTarget = embedded;
+        unawaited(_calculateRoute(force: true));
+        notifyListeners();
+      }
+    }
+    await _syncMemberListAndNames(
+      groupId: group.id,
+      memberUids: group.memberUids,
+    );
+  }
+
+  Future<void> _syncMemberListAndNames({
+    required String groupId,
+    required List<String> memberUids,
+  }) async {
+    if (!_isTracking || _currentGroupId != groupId) return;
+
+    final missingUids = memberUids
+        .where((id) => id.isNotEmpty && !_memberNamesCache.containsKey(id))
+        .toList();
+
+    if (missingUids.isNotEmpty) {
+      final fetched = await _groupService.getMemberNames(missingUids);
+      _memberNamesCache.addAll(fetched);
+    }
+
+    final namesMap = <String, String>{};
+    for (final id in memberUids) {
+      if (id.isEmpty) continue;
+      if (id == _currentUid && _currentUserName != null) {
+        namesMap[id] = _currentUserName!;
+      } else {
+        namesMap[id] = _memberNamesCache[id] ?? 'Anggota';
+      }
+    }
+
+    final refLat = _currentPosition?.latitude ?? _defaultFallbackLat;
+    final refLng = _currentPosition?.longitude ?? _defaultFallbackLng;
+
+    _locationService.syncRegisteredMembers(
+      groupId: groupId,
+      memberUids: memberUids,
+      memberNames: namesMap,
+      fallbackLat: refLat,
+      fallbackLng: refLng,
+      currentUid: _currentUid,
+    );
+  }
+
   /// Broadcast lokasi sendiri sekali (untuk update manual / initial).
   Future<void> broadcastLocation({
     required String groupId,
@@ -800,15 +969,44 @@ class LocationProvider extends ChangeNotifier with WidgetsBindingObserver {
         pos = await Geolocator.getCurrentPosition(
           locationSettings: const LocationSettings(
             accuracy: LocationAccuracy.high,
-            timeLimit: Duration(seconds: 10),
+            timeLimit: Duration(seconds: 6),
           ),
         );
       } catch (_) {
-        if (!kIsWeb) {
-          pos = await Geolocator.getLastKnownPosition();
+        try {
+          pos = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(
+              accuracy: LocationAccuracy.medium,
+              timeLimit: Duration(seconds: 4),
+            ),
+          );
+        } catch (_) {
+          if (!kIsWeb) {
+            try {
+              pos = await Geolocator.getLastKnownPosition();
+            } catch (_) {}
+          }
         }
       }
-      if (pos == null) return;
+
+      if (pos == null) {
+        // Fallback jika berjalan di emulator/web atau sinyal GPS belum terkunci
+        final fallbackLat = _currentPosition?.latitude ?? _defaultFallbackLat;
+        final fallbackLng = _currentPosition?.longitude ?? _defaultFallbackLng;
+        if (!_isGhostMode) {
+          await _locationService.updateLocation(
+            groupId: groupId,
+            uid: uid,
+            name: name,
+            lat: fallbackLat,
+            lng: fallbackLng,
+            status: _currentMemberStatus,
+          );
+        }
+        notifyListeners();
+        return;
+      }
+
       final isFirstFix = _currentPosition == null;
       _currentPosition = pos;
       _recordPoint(pos.latitude, pos.longitude);
@@ -911,6 +1109,7 @@ class LocationProvider extends ChangeNotifier with WidgetsBindingObserver {
     final uid = _currentUid;
     final name = _currentUserName;
     if (gid != null && uid != null && name != null) {
+      unawaited(_syncGroupFromDb(gid));
       unawaited(_acquireAndBroadcastPosition(groupId: gid, uid: uid, userName: name));
       _startForegroundPositionStream(groupId: gid, uid: uid, userName: name);
     }
